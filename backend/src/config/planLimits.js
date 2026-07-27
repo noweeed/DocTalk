@@ -1,5 +1,5 @@
 const planLimits = {
-  free: { maxDocuments: 2, maxQuestionsPerMonth: 50, model: "standard" },
+  free: { maxDocuments: 5, maxQuestionsPerMonth: 50, model: "standard" },
   pro: {
     maxDocuments: Infinity,
     maxQuestionsPerMonth: Infinity,
