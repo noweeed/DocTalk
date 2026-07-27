@@ -1,9 +1,16 @@
 const Conversation = require("../models/Conversation");
 const Message = require("../models/Message");
 const Document = require("../models/Document");
+const Chunk = require("../models/Chunk");
 const { embedText } = require("../services/embedding.service");
 const { searchChunks } = require("../services/retrieval.service");
-const { streamAnswer, NO_CONTEXT_ANSWER } = require("../services/llm.service");
+const { streamAnswer, streamSummarization, NO_CONTEXT_ANSWER } = require("../services/llm.service");
+
+const SUMMARIZATION_MAX_CHARS = 12000;
+
+function isSummarizationIntent(question) {
+  return /\b(summar(y|ize|ise)|overview|tl;?dr|main points|key points|what is this (document|pdf) about)\b/i.test(question);
+}
 
 const createConversation = async (req, res) => {
   try {
@@ -102,34 +109,82 @@ const sendMessage = async (req, res) => {
       content: question,
     });
 
-    const questionEmbedding = await embedText(question);
-    const matchedChunks = await searchChunks(documentId, questionEmbedding);
-
-    const citations = matchedChunks.map((chunk) => ({
-      pageNumber: chunk.pageNumber,
-      chunkIndex: chunk.chunkIndex,
-      score: chunk.score,
-    }));
-
-    // Set SSE headers
+    // Set SSE headers (shared by both paths)
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders();
 
     let fullAnswer = "";
+    let citations = [];
+    let matchedChunks = [];
 
-    try {
-      const stream = streamAnswer(question, matchedChunks);
+    if (isSummarizationIntent(question)) {
+      // ── SUMMARIZATION PATH ──────────────────────────────────
+      const chunks = await Chunk.find({ documentId })
+        .sort({ pageNumber: 1, chunkIndex: 1 })
+        .lean();
 
-      for await (const textChunk of stream) {
-        fullAnswer += textChunk;
-        res.write(`data: ${JSON.stringify({ content: textChunk })}\n\n`);
+      if (chunks.length === 0) {
+        res.write(`data: ${JSON.stringify({ content: NO_CONTEXT_ANSWER })}\n\n`);
+        fullAnswer = NO_CONTEXT_ANSWER;
+      } else {
+        // Concatenate content with character budget
+        const totalChars = chunks.reduce((s, c) => s + c.content.length, 0);
+        let context;
+
+        if (totalChars <= SUMMARIZATION_MAX_CHARS) {
+          context = chunks.map((c) => c.content).join("\n\n");
+        } else {
+          const ratio = SUMMARIZATION_MAX_CHARS / totalChars;
+          const targetChunks = Math.max(1, Math.floor(chunks.length * ratio));
+          const step = Math.max(1, Math.floor(chunks.length / targetChunks));
+          const sampled = chunks.filter((_, i) => i % step === 0);
+          context = sampled.map((c) => c.content).join("\n\n");
+        }
+
+        try {
+          const stream = streamSummarization(question, context);
+
+          for await (const textChunk of stream) {
+            fullAnswer += textChunk;
+            res.write(`data: ${JSON.stringify({ content: textChunk })}\n\n`);
+          }
+        } catch (streamError) {
+          res.write(`data: ${JSON.stringify({ error: streamError.message })}\n\n`);
+          if (!fullAnswer) fullAnswer = "An error occurred while generating the summary.";
+        }
+
+        // Page-range citation instead of individual chunk citations
+        const pages = chunks.map((c) => c.pageNumber);
+        const minPage = Math.min(...pages);
+        const maxPage = Math.max(...pages);
+        const pageRange = minPage === maxPage ? `${minPage}` : `${minPage}-${maxPage}`;
+        matchedChunks = [{ pageNumber: pageRange, note: "full document" }];
       }
-    } catch (streamError) {
-      res.write(`data: ${JSON.stringify({ error: streamError.message })}\n\n`);
-      // If nothing was streamed yet, use the partial answer or a fallback
-      if (!fullAnswer) fullAnswer = "An error occurred while generating the answer.";
+    } else {
+      // ── NORMAL RETRIEVAL PATH ─────────────────────────────
+      const questionEmbedding = await embedText(question);
+      const results = await searchChunks(documentId, questionEmbedding);
+
+      citations = results.map((chunk) => ({
+        pageNumber: chunk.pageNumber,
+        chunkIndex: chunk.chunkIndex,
+        score: chunk.score,
+      }));
+      matchedChunks = results;
+
+      try {
+        const stream = streamAnswer(question, results);
+
+        for await (const textChunk of stream) {
+          fullAnswer += textChunk;
+          res.write(`data: ${JSON.stringify({ content: textChunk })}\n\n`);
+        }
+      } catch (streamError) {
+        res.write(`data: ${JSON.stringify({ error: streamError.message })}\n\n`);
+        if (!fullAnswer) fullAnswer = "An error occurred while generating the answer.";
+      }
     }
 
     // Save the complete assistant message

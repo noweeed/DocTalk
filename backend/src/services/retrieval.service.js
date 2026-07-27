@@ -25,6 +25,9 @@ const deduplicate = (chunks) => {
 };
 
 const searchChunks = async (documentId, questionEmbedding, topK = 5) => {
+  console.log(`[retrieval] documentId=${documentId} (type: ${typeof documentId})`);
+  console.log(`[retrieval] documentId instanceof ObjectId: ${documentId instanceof mongoose.Types.ObjectId}`);
+
   const results = await Chunk.aggregate([
     {
       $vectorSearch: {
@@ -32,7 +35,7 @@ const searchChunks = async (documentId, questionEmbedding, topK = 5) => {
         path: "embedding",
         queryVector: questionEmbedding,
         numCandidates: 100,
-        limit: topK,
+        limit: 20,
         filter: { documentId: new mongoose.Types.ObjectId(documentId) },
       },
     },
@@ -48,7 +51,11 @@ const searchChunks = async (documentId, questionEmbedding, topK = 5) => {
     {
       $match: { score: { $gte: SCORE_THRESHOLD } },
     },
+    { $limit: topK },
   ]);
+
+  console.log(`[retrieval] rawResults=${results.length}`);
+  console.log(`[retrieval] scores=`, results.map(r => r.score));
 
   return deduplicate(results);
 };

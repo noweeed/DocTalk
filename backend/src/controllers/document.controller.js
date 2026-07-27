@@ -54,7 +54,7 @@ const uploadDocument = async (req, res) => {
       await Chunk.insertMany(allChunks);
     }
 
-    document.pageCount = pages.length;
+    document.pageCount = pdfData.numpages;
     await document.save();
 
     await embedChunksForDocument(document._id);

@@ -3,9 +3,11 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const passport = require("passport");
 const rateLimit = require("express-rate-limit");
+const dns = require("dns");
 
 dotenv.config();
 
+dns.setServers(["1.1.1.1", "1.0.0.1"]);
 const connectDB = require("./config/db");
 const configurePassport = require("./config/passport");
 const authRoutes = require("./routes/auth.routes");
@@ -17,10 +19,12 @@ const errorHandler = require("./middleware/error.middleware");
 
 const app = express();
 
-app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:5173",
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    credentials: true,
+  }),
+);
 app.use(express.json());
 app.use(passport.initialize());
 
@@ -44,7 +48,7 @@ app.use("/api/billing", billingRoutes);
 
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 const start = async () => {
   try {
