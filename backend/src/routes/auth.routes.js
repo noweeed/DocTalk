@@ -7,8 +7,15 @@ const {
   logout,
   googleCallback,
   me,
+  updateMe,
+  requestPasswordChange,
+  confirmPasswordChange,
+  forgotPassword,
+  resetPassword,
+  uploadAvatar,
 } = require("../controllers/auth.controller");
 const auth = require("../middleware/auth.middleware");
+const upload = require("../middleware/upload.middleware");
 
 const router = express.Router();
 
@@ -24,6 +31,12 @@ router.post("/signup", authLimiter, signup);
 router.post("/login", authLimiter, login);
 router.post("/logout", auth, logout);
 router.get("/me", auth, me);
+router.patch("/me", auth, updateMe);
+router.post("/avatar", auth, upload.image.single("avatar"), uploadAvatar);
+router.post("/password/request", auth, authLimiter, requestPasswordChange);
+router.post("/password/confirm", authLimiter, confirmPasswordChange);
+router.post("/forgot-password", authLimiter, forgotPassword);
+router.post("/reset-password", authLimiter, resetPassword);
 
 router.get(
   "/google",

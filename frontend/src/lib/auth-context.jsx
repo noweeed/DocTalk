@@ -19,14 +19,29 @@ export function AuthProvider({ children }) {
     api
       .get("/api/auth/me")
       .then((data) => setUser(data))
-      .catch(() => localStorage.removeItem("token"))
+      .catch((err) => {
+        if (err.status === 401) {
+          localStorage.removeItem("token");
+        }
+      })
       .finally(() => setLoading(false));
   }, []);
+
+  const refreshUser = async () => {
+    try {
+      const data = await api.get("/api/auth/me");
+      setUser(data);
+    } catch {
+      localStorage.removeItem("token");
+      setUser(null);
+    }
+  };
 
   const login = async (email, password) => {
     const res = await api.post("/api/auth/login", { email, password });
     localStorage.setItem("token", res.token);
     setUser(res.user);
+    refreshUser();
     navigate("/dashboard");
   };
 
@@ -34,6 +49,7 @@ export function AuthProvider({ children }) {
     const res = await api.post("/api/auth/signup", { name, email, password });
     localStorage.setItem("token", res.token);
     setUser(res.user);
+    refreshUser();
     navigate("/dashboard");
   };
 
@@ -44,8 +60,12 @@ export function AuthProvider({ children }) {
     navigate("/login");
   };
 
+  const updateUser = (updates) => {
+    setUser((prev) => (prev ? { ...prev, ...updates } : prev));
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout, updateUser, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
