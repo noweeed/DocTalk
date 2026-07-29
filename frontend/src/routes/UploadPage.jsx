@@ -6,9 +6,11 @@ import { toast } from "sonner";
 import { UploadCloud, CheckCircle2, FileText, Loader2 } from "lucide-react";
 import { documentsApi } from "@/lib/documents";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 
 export default function UploadPage() {
   const queryClient = useQueryClient();
+  const { refreshUser } = useAuth();
   const [state, setState] = useState("idle");
   const [dragOver, setDragOver] = useState(false);
   const [fileName, setFileName] = useState("");
@@ -47,6 +49,8 @@ export default function UploadPage() {
           toast.error("Document processing failed.");
         } else {
           setState("done");
+          queryClient.invalidateQueries({ queryKey: ["documents"] });
+          refreshUser();
         }
       } else if (Date.now() - pollStartRef.current > 60000) {
         clearInterval(pollRef.current);
@@ -56,7 +60,7 @@ export default function UploadPage() {
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
-  }, []);
+  }, [queryClient, refreshUser]);
 
   useEffect(() => {
     if (state === "processing" && docId) {
@@ -96,7 +100,7 @@ export default function UploadPage() {
 
   return (
     <>
-      <TopBar title="Upload PDF" />
+      <TopBar />
       <main className="mx-auto w-full max-w-3xl px-4 pb-16 pt-10 sm:px-6">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Upload a PDF</h1>
         <p className="mt-1.5 text-sm text-muted-foreground">

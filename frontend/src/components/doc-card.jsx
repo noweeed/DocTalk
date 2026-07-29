@@ -44,29 +44,48 @@ export function DocCard({ doc, variant = "default", selected, onToggleSelect, on
         </button>
       )}
 
-      <Link
-        to={`/documents/${doc._id}`}
-        className="flex flex-1 flex-col gap-3"
-      >
-        <div className="flex items-start justify-between">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-            <FileText className="h-5 w-5" strokeWidth={1.8} />
+      {trashed ? (
+        <div className="flex flex-1 flex-col gap-3">
+          <div className="flex items-start justify-between">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+              <FileText className="h-5 w-5" strokeWidth={1.8} />
+            </div>
+            <div className="flex items-center gap-1" />
           </div>
-          <div className="flex items-center gap-1">
-            {doc.isStarred && !trashed && (
-              <Star className="h-4 w-4 fill-primary text-primary" />
-            )}
+          <div className="min-w-0 flex-1">
+            <h3 className="line-clamp-2 text-sm font-medium leading-tight text-foreground">
+              {doc.title}
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {timeAgo(doc.lastOpenedAt)} · {doc.pageCount ?? "?"} pages
+            </p>
           </div>
         </div>
-        <div className="min-w-0 flex-1">
-          <h3 className="line-clamp-2 text-sm font-medium leading-tight text-foreground">
-            {doc.title}
-          </h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {timeAgo(doc.lastOpenedAt)} · {doc.pageCount ?? "?"} pages
-          </p>
-        </div>
-      </Link>
+      ) : (
+        <Link
+          to={`/documents/${doc._id}`}
+          className="flex flex-1 flex-col gap-3"
+        >
+          <div className="flex items-start justify-between">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+              <FileText className="h-5 w-5" strokeWidth={1.8} />
+            </div>
+            <div className="flex items-center gap-1">
+              {doc.isStarred && (
+                <Star className="h-4 w-4 fill-primary text-primary" />
+              )}
+            </div>
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="line-clamp-2 text-sm font-medium leading-tight text-foreground">
+              {doc.title}
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {timeAgo(doc.lastOpenedAt)} · {doc.pageCount ?? "?"} pages
+            </p>
+          </div>
+        </Link>
+      )}
 
       {!trashed && (
         <div className="absolute right-2 top-2 z-10 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 max-sm:opacity-100">

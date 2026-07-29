@@ -67,7 +67,7 @@ export default function TrashPage() {
 
   return (
     <>
-      <TopBar title="Trash" />
+      <TopBar />
       <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8 sm:px-6 lg:px-10">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Trash</h1>
 

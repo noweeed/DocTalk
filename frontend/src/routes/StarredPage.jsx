@@ -33,7 +33,7 @@ export default function StarredPage() {
 
   return (
     <>
-      <TopBar title="Starred" />
+      <TopBar />
       <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8 sm:px-6 lg:px-10">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Starred</h1>
         <p className="mt-1.5 text-sm text-muted-foreground">Documents you want to keep close.</p>

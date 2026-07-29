@@ -29,9 +29,7 @@ import { conversationsApi } from "@/lib/conversations";
 import { streamMessage } from "@/lib/streamMessage";
 
 const starters = [
-  "Summarize this document in 5 bullets",
-  "What are the key financial figures?",
-  "List every action item mentioned",
+  "Summarize this document",
 ];
 
 export default function DocumentChat() {
@@ -149,6 +147,7 @@ export default function DocumentChat() {
             page: c.pageNumber,
             chunkId: c.chunkIndex,
             score: c.score,
+            note: c.note,
           })),
         })),
       );
@@ -188,6 +187,7 @@ export default function DocumentChat() {
                     page: c.pageNumber,
                     chunkId: c.chunkIndex,
                     score: c.score,
+                    note: c.note,
                   })),
                 }
               : msg,
@@ -438,15 +438,24 @@ function ChatPanel({ messages, streaming, input, setInput, ask, jumpToPage, chat
                     </div>
                     {!m.streaming && m.citations && m.citations.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1.5">
-                        {m.citations.map((c, i) => (
-                          <button
-                            key={i}
-                            onClick={() => jumpToPage(c.page)}
-                            className="rounded-md border border-border bg-card px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
-                          >
-                            p. {c.page}
-                          </button>
-                        ))}
+                        {m.citations.map((c, i) =>
+                          c.note === "full document" ? (
+                            <span
+                              key={i}
+                              className="rounded-md border border-border bg-card px-2 py-0.5 text-[11px] text-muted-foreground"
+                            >
+                              pp. {c.page}
+                            </span>
+                          ) : (
+                            <button
+                              key={i}
+                              onClick={() => jumpToPage(c.page)}
+                              className="rounded-md border border-border bg-card px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+                            >
+                              p. {c.page}
+                            </button>
+                          )
+                        )}
                       </div>
                     )}
                   </div>

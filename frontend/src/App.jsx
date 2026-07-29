@@ -6,6 +6,10 @@ import { AuthProvider } from "./lib/auth-context";
 import LandingPage from "./routes/index";
 import LoginPage from "./routes/login";
 import SignupPage from "./routes/signup";
+import ForgotPasswordPage from "./routes/ForgotPasswordPage";
+import ResetPasswordPage from "./routes/ResetPasswordPage";
+import ChangePasswordPage from "./routes/ChangePasswordPage";
+import OAuthCallback from "./routes/OAuthCallback";
 import AppLayout from "./routes/AppLayout";
 import Dashboard from "./routes/Dashboard";
 import RecentPage from "./routes/RecentPage";
@@ -49,6 +53,10 @@ export default function App() {
               <Route path="/" element={<LandingPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/signup" element={<SignupPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/change-password" element={<ChangePasswordPage />} />
+              <Route path="/oauth/callback" element={<OAuthCallback />} />
               <Route path="/" element={<AppLayout />}>
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="recent" element={<RecentPage />} />

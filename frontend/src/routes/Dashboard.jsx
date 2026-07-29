@@ -3,6 +3,8 @@ import { TopBar } from "@/components/top-bar";
 import { DocCard } from "@/components/doc-card";
 import { documentsApi } from "@/lib/documents";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/lib/auth-context";
+import { formatBytes } from "@/lib/utils";
 import { toast } from "sonner";
 import { Upload, FileText, HardDrive, MessageSquare, Plus } from "lucide-react";
 
@@ -21,6 +23,7 @@ function StatCard({ icon: Icon, label, value }) {
 }
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: docs = [], isLoading } = useQuery({
@@ -48,7 +51,7 @@ export default function Dashboard() {
 
   return (
     <>
-      <TopBar title="Dashboard" />
+      <TopBar />
       <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8 sm:px-6 lg:px-10">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -70,8 +73,8 @@ export default function Dashboard() {
 
         <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <StatCard icon={FileText} label="Documents" value={isLoading ? "—" : docs.filter((d) => !d.isTrashed).length} />
-          <StatCard icon={HardDrive} label="Storage used" value="—" />
-          <StatCard icon={MessageSquare} label="Questions this month" value="—" />
+          <StatCard icon={HardDrive} label="Storage used" value={user?.storageUsedBytes != null ? formatBytes(user.storageUsedBytes) : "—"} />
+          <StatCard icon={MessageSquare} label="Questions this month" value={user?.questionsUsedThisMonth != null ? `${user.questionsUsedThisMonth} / ${user?.plan === "pro" ? "∞" : "50"}` : "—"} />
         </div>
 
         {isLoading ? (

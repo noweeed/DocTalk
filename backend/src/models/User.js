@@ -1,41 +1,20 @@
 const mongoose = require("mongoose");
 
-// A user is valid if it has EITHER passwordHash OR googleId (enforced in controller logic).
 const userSchema = new mongoose.Schema(
   {
-    name: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-      lowercase: true,
-      trim: true,
-    },
-    passwordHash: {
-      type: String,
-      default: null,
-    },
-    googleId: {
-      type: String,
-      default: null,
-    },
-    plan: {
-      type: String,
-      enum: ["free", "pro"],
-      default: "free",
-    },
-    questionsUsedThisMonth: {
-      type: Number,
-      default: 0,
-    },
-    usageResetAt: {
-      type: Date,
-      default: () => new Date(),
-    },
+    name: { type: String, required: true, trim: true },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    passwordHash: { type: String, default: null },
+    googleId: { type: String, default: null },
+    plan: { type: String, enum: ["free", "pro"], default: "free" },
+    questionsUsedThisMonth: { type: Number, default: 0 },
+    usageResetAt: { type: Date, default: () => new Date() },
+    avatarUrl: { type: String, default: null },
+    resetPasswordToken: { type: String, default: null },
+    resetPasswordTokenExpiry: { type: Date, default: null },
+    pendingPasswordHash: { type: String, default: null },
+    passwordChangeToken: { type: String, default: null },
+    passwordChangeTokenExpiry: { type: Date, default: null },
   },
   { timestamps: true }
 );
