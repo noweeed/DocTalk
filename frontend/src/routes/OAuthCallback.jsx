@@ -7,7 +7,7 @@ import { Loader2 } from "lucide-react";
 export default function OAuthCallback() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { updateUser } = useAuth();
+  const { setUser } = useAuth();
 
   useEffect(() => {
     const code = searchParams.get("code");
@@ -26,7 +26,7 @@ export default function OAuthCallback() {
       .post("/api/auth/oauth/exchange", { code })
       .then((res) => {
         localStorage.setItem("token", res.token);
-        updateUser(res.user);
+        setUser(res.user);
         navigate("/dashboard", { replace: true });
       })
       .catch((err) => {
@@ -35,7 +35,7 @@ export default function OAuthCallback() {
         localStorage.removeItem("token");
         navigate("/login?oauth=error", { replace: true });
       });
-  }, [searchParams, navigate, updateUser]);
+  }, [searchParams, navigate, setUser]);
 
   return (
     <div className="flex h-screen items-center justify-center bg-background">
