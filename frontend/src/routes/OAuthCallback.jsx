@@ -10,22 +10,22 @@ export default function OAuthCallback() {
   const { updateUser } = useAuth();
 
   useEffect(() => {
-    const token = searchParams.get("token");
-    if (!token) {
-      navigate("/login", { replace: true });
+    const code = searchParams.get("code");
+    if (!code) {
+      navigate("/login?oauth=error", { replace: true });
       return;
     }
 
-    localStorage.setItem("token", token);
-
-    api.get("/api/auth/me")
-      .then((user) => {
-        updateUser(user);
+    api
+      .post("/api/auth/oauth/exchange", { code })
+      .then((res) => {
+        localStorage.setItem("token", res.token);
+        updateUser(res.user);
         navigate("/dashboard", { replace: true });
       })
       .catch(() => {
         localStorage.removeItem("token");
-        navigate("/login", { replace: true });
+        navigate("/login?oauth=error", { replace: true });
       });
   }, [searchParams, navigate, updateUser]);
 

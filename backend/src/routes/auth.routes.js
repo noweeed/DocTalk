@@ -1,11 +1,13 @@
 const express = require("express");
 const passport = require("passport");
-const rateLimit = require("express-rate-limit");
+const crypto = require("crypto");
+const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 const {
   signup,
   login,
   logout,
   googleCallback,
+  exchangeOAuthCode,
   me,
   updateMe,
   requestPasswordChange,
@@ -19,12 +21,35 @@ const upload = require("../middleware/upload.middleware");
 
 const router = express.Router();
 
+const OAUTH_STATE_TTL_MS = 5 * 60 * 1000;
+
+const getCookie = (req, name) => {
+  const header = req.headers.cookie || "";
+  const match = header.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+};
+
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: process.env.NODE_ENV === "test" ? 10000 : 5,
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many attempts, please try again later." },
+  // Pre-auth routes have no logged-in user, so key on the real client IP
+  // (accurate thanks to "trust proxy") plus the attempted email. This keeps
+  // shared-IP users from being blocked because one bad actor targets a
+  // different account from the same address.
+  keyGenerator: (req) => {
+    const ipKey = ipKeyGenerator(req.ip);
+    const email =
+      typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    return `${ipKey}-${email || "no-email"}`;
+  },
 });
 
 router.post("/signup", authLimiter, signup);
@@ -37,21 +62,40 @@ router.post("/password/request", auth, authLimiter, requestPasswordChange);
 router.post("/password/confirm", authLimiter, confirmPasswordChange);
 router.post("/forgot-password", authLimiter, forgotPassword);
 router.post("/reset-password", authLimiter, resetPassword);
+router.post("/oauth/exchange", authLimiter, exchangeOAuthCode);
 
-router.get(
-  "/google",
+router.get("/google", (req, res, next) => {
+  const state = crypto.randomUUID();
+
+  res.cookie("oauth_state", state, {
+    httpOnly: true,
+    sameSite: "lax",
+    maxAge: OAUTH_STATE_TTL_MS,
+    path: "/api/auth/google",
+  });
+
   passport.authenticate("google", {
     scope: ["profile", "email"],
+    state,
     session: false,
-  })
-);
+  })(req, res, next);
+});
 
 router.get(
   "/google/callback",
-  passport.authenticate("google", {
-    session: false,
-    failureRedirect: "/api/auth/google/failure",
-  }),
+  (req, res, next) => {
+    const cookieState = getCookie(req, "oauth_state");
+    res.clearCookie("oauth_state", { path: "/api/auth/google" });
+
+    if (!cookieState || !req.query.state || cookieState !== req.query.state) {
+      return res.status(401).json({ message: "Google authentication failed" });
+    }
+
+    passport.authenticate("google", {
+      session: false,
+      failureRedirect: "/api/auth/google/failure",
+    })(req, res, next);
+  },
   googleCallback
 );
 

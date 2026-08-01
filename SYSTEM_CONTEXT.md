@@ -12,22 +12,26 @@
 
 **Main features:**
 
-- User authentication (signup, login, JWT-based session)
+- User authentication (signup, login, JWT-based session, Google OAuth)
 - PDF upload and text extraction
 - Automatic text chunking with configurable size and overlap
 - Vector embedding generation via Google Gemini
 - Vector similarity search via MongoDB Atlas Vector Search
 - Conversation-based Q&A with streaming LLM responses (SSE)
 - Source citations (page-level references) returned with every answer
+- Plan-based usage limits (free vs pro) with monthly question reset
+- Stripe subscriptions (hosted Checkout + Billing Portal) with webhook-driven plan updates
 
-**Current development stage:** Backend API is functional end-to-end. All core pipeline features (auth, upload, chunking, embedding, retrieval, LLM answering with streaming) are verified working. Document management (list, get, rename, star, trash, restore, permanent delete) and GridFS file storage (PDF persistence, download, cleanup) are implemented. Frontend is built separately via Lovable and is not yet connected to this backend.
+**Current development stage:** Backend API is functional end-to-end. All core pipeline features (auth, upload, chunking, embedding, retrieval, LLM answering with streaming) are verified working. Document management (list, get, rename, star, trash, restore, permanent delete), GridFS file storage (PDF persistence, download, cleanup), Stripe billing (Checkout, Billing Portal, subscription webhooks), and frontend wiring are all implemented. Backend test suite (57 tests) and frontend build both pass.
 
 **What is already working:**
 
 - Health check endpoint (`GET /health` via `health.routes.js`)
 - User signup with email validation and password hashing
-- User login with JWT generation
-- Get current user profile (protected route)
+- User login with JWT generation, JWT revocation (blocklist) on logout
+- Get current user profile (protected route) — includes `plan`, `planStatus`, `stripeSubscriptionEndsAt`
+- Google OAuth (Passport.js + Google strategy)
+- Password flows: forgot / reset / change (token-based, emails via Nodemailer)
 - PDF upload: multer parses file, pdf-parse extracts text, text is chunked, chunks are saved to MongoDB, Gemini embeddings are generated in batches and stored
 - GridFS storage: raw PDF bytes are persisted to a `pdfs` GridFS bucket during upload
 - Document management: list (with filter: recent/starred/trash), get, rename, star/unstar, trash, restore, permanent delete (with GridFS cleanup)
@@ -35,16 +39,23 @@
 - Conversation creation tied to a document
 - Conversation listing (sorted by most recent)
 - Get conversation with full message history
-- Send message: question is embedded, vector search retrieves top matching chunks, Groq streams the answer via SSE, full answer and citations are saved
+- Send message: question is embedded, vector search retrieves top matching chunks, Groq streams the answer via SSE, full answer and citations are saved (intent routing: question / summarization / small-talk)
+- Stripe billing: hosted Checkout (`POST /api/billing/upgrade`), Billing Portal (`POST /api/billing/portal`), plan endpoint (`GET /api/billing/plan`)
+- Stripe webhooks: `/api/billing/webhook` (raw body + signature verification) handling 6 subscription events, storing `plan`/`planStatus`/`stripeSubscriptionEndsAt`
+- Plan-based usage limits via `planLimits.middleware.js` (free = 5 docs / 50 questions/mo, pro = unlimited) with monthly reset
+- Security hardening in `auth.controller.js`: `typeof` guards on `token`/`newPassword` (NoSQL-injection safe) + generic 500s (no `error.message` leakage)
 - Centralized error handling middleware
-- CORS middleware configured (permissive, no origin restriction)
+- CORS middleware configured (restricted to `FRONTEND_URL`)
+- Frontend SPA (React/Vite) wired to the real API — auth, dashboard, documents, settings with billing UI, document chat with streaming
 - `.env.example` with all required variable placeholders
 
 **What is incomplete / pending:**
 
-- Frontend wiring (Lovable frontend exists separately, not connected)
-- Google OAuth
-- Multi-document conversation support
+- Live `stripe listen` webhook testing (signature verification tested against a real secret)
+- Multi-document conversation support (`sendMessage` only uses `documentIds[0]`)
+- Security hardening beyond `auth.controller.js` (see Section 10 Known Issues)
+- Frontend `npm run lint` fix (eslint config imports `typescript-eslint` which isn't installed)
+- `react-router-dom` upgrade to clear an npm audit advisory (low practical impact)
 - Proper README
 
 **Main technologies used:**
@@ -64,6 +75,8 @@
 | File upload      | multer                               | ^2.2.0 (memory storage, 20MB limit, PDF only)   |
 | PDF extraction   | pdf-parse                            | ^1.1.1 (pinned — v2 has breaking API changes)   |
 | CORS             | cors                                 | ^2.8.6                                          |
+| Billing          | stripe                               | ^22.4.0 (hosted Checkout + Billing Portal)      |
+| Email            | nodemailer                           | Transactional (password reset/change) — Gmail SMTP |
 | Env vars         | dotenv                               | ^17.4.2                                         |
 | Dev runner       | nodemon                              | ^3.1.14                                         |
 
@@ -84,12 +97,14 @@ User (Browser/Postman)
 │         (server.js :3000)           │
 ├─────────────────────────────────────┤
 │  Global Middleware:                 │
-│  - cors() (permissive)              │
+│  - cors() (restricted to FRONTEND_URL)│
 │  - express.json() (body parsing)    │
+│  - express.raw() on /api/billing/webhook (BEFORE json — for Stripe sig verify) │
 ├─────────────────────────────────────┤
 │  Per-Route Middleware:              │
 │  - auth.middleware.js (JWT verify)  │
 │  - upload.middleware.js (multer)    │
+│  - planLimits.middleware.js (doc/question quota) │
 ├─────────────────────────────────────┤
 │  Routes → Controllers → Services   │
 ├─────────────────────────────────────┤
@@ -100,14 +115,19 @@ User (Browser/Postman)
 │  ├── db.js (MongoDB connection)     │
 │  ├── gemini.js (Google AI client)   │
 │  ├── groq.js (Groq client)          │
-│  └── gridfs.js (GridFS bucket)      │
+│  ├── gridfs.js (GridFS bucket)      │
+│  ├── stripe.js (Stripe client)      │
+│  ├── passport.js (Google OAuth)     │
+│  ├── planLimits.js (free/pro limits)│
+│  └── resend.js (UNUSED — see email.service.js) │
 └──────────────┬──────────────────────┘
                │
                ▼
 ┌──────────────────────────────────────┐
 │         MongoDB Atlas                │
 │  Collections: users, documents,      │
-│  chunks, conversations, messages     │
+│  chunks, conversations, messages,    │
+│  tokenblocklists                     │
 │                                      │
 │  GridFS Bucket: pdfs                 │
 │  - Stores raw PDF files              │
@@ -121,6 +141,10 @@ User (Browser/Postman)
 │  - Similarity: cosine                │
 │  - Filter: documentId                │
 └──────────────────────────────────────┘
+
+Stripe (external):
+  Checkout / Billing Portal (redirected to from browser)
+  Webhooks ──► POST /api/billing/webhook (sig-verified, raw body)
 ```
 
 ### Request Flow — Document Upload
@@ -129,6 +153,7 @@ User (Browser/Postman)
 POST /api/documents (multipart/form-data, field: "file")
     │
     ├─ auth.middleware.js → verifies JWT, sets req.user
+    ├─ planLimits.middleware.js → checks free-plan doc quota (5 docs)
     ├─ upload.middleware.js → multer parses PDF into req.file.buffer
     │
     ▼
@@ -199,10 +224,12 @@ routes/  ─────────────────────►  con
                                     ├──► services/embedding.service.js
                                     ├──► services/llm.service.js
                                     ├──► services/retrieval.service.js
+                                    ├──► services/billing.service.js
+                                    ├──► services/email.service.js
                                     └──► config/gridfs.js
                                               │
-                                              ├──► models/ (Chunk, User, Document, Conversation, Message)
-                                              └──► config/ (db.js, gemini.js, groq.js)
+                                              ├──► models/ (Chunk, User, Document, Conversation, Message, TokenBlocklist)
+                                              └──► config/ (db.js, gemini.js, groq.js, stripe.js, passport.js, planLimits.js)
 ```
 
 ### Important Design Decisions
@@ -215,6 +242,10 @@ routes/  ─────────────────────►  con
 6. **`dotenv.config()` must be the first line in server.js** before any other `require()`. Modules that read `process.env` at import time will get `undefined` if dotenv hasn't loaded yet.
 7. **pdf-parse pinned to v1.1.1:** v2.x completely changed its export shape (exports a class, not a callable function). Do not upgrade without rewriting extraction code.
 8. **Centralized error handling:** `error.middleware.js` is mounted last in `server.js`. Errors can be thrown/next'd to be caught centrally, or handled inline with try/catch per controller function.
+9. **Stripe webhook ordering:** `/api/billing/webhook` is mounted in `server.js` with `express.raw({ type: "application/json" })` BEFORE the global `express.json()`. Stripe's `constructEvent()` needs the raw body for signature verification; a JSON-parsed body breaks it. The webhook route is NOT JWT-protected — it authenticates via the Stripe signature.
+10. **Webhook identity via Stripe only:** user lookup on webhook events uses ONLY `event.data.object.customer` (or `client_reference_id`) — never any other client-supplied body field. Handles exactly 6 events and always responds 200 (with a logged warning instead of throwing when a user can't be found), so Stripe doesn't retry no-op events forever.
+11. **Plan state is webhook-authoritative:** `user.plan`/`planStatus`/`stripeSubscriptionEndsAt` are only ever written by verified webhook handlers. The Checkout `?upgraded=true` redirect is cosmetic; the frontend refreshes `/me` to pick up the webhook-written state.
+12. **NoSQL-injection guard:** any user-supplied value that reaches a Mongo query (e.g. a reset token) is `typeof`-checked first. Auth controllers return generic `"Something went wrong"` 500s to avoid leaking internal error messages.
 
 ---
 
@@ -222,71 +253,96 @@ routes/  ─────────────────────►  con
 
 ```
 D:\DocTalk\
-├── .gitignore                          # Ignores backend/node_modules, backend/.env, *.log, OS files
+├── .gitignore                          # Ignores node_modules, .env, *.log, OS files
 ├── docTalk_prd.md                      # Backend Product Requirements Document (289 lines)
-├── PROJECT_CONTEXT.md                  # AI onboarding context document (148 lines)
+├── PROJECT_CONTEXT.md                  # AI onboarding context document (up-to-date)
 ├── README.md                           # Stub — contains only "# DocTalk"
 ├── SYSTEM_CONTEXT.md                   # This file — complete system transfer document
+├── backend.md                          # Backend feature/setup doc (up-to-date)
+├── frontend.md                         # Frontend feature/setup doc (up-to-date)
 │
-└── backend/
-    ├── .env                            # Live environment variables (MongoDB URI, JWT secret, API keys)
-    ├── .env.example                    # Placeholder values for all env vars (PORT, MONGODB_URI, JWT_SECRET, GEMINI_API_KEY, GROQ_API_KEY)
-    ├── jest.config.js                  # Jest config: node env, setupFiles, 20s timeout
-    ├── package.json                    # Dependencies and scripts (test script: jest --runInBand --detectOpenHandles --forceExit)
-    ├── package-lock.json               # Lockfile
-    │
-    ├── src/
-    │   ├── server.js                   # Entry point — Express app setup, route mounting, DB connection, CORS, error handler
-    │   │
-    │   ├── config/
-    │   │   ├── db.js                   # MongoDB/Mongoose connection logic
-    │   │   ├── gemini.js               # GoogleGenerativeAI client initialization
-    │   │   ├── groq.js                 # Groq SDK client initialization
-    │   │   └── gridfs.js              # GridFS bucket factory (lazy init from mongoose connection, cached)
-    │   │
-    │   ├── controllers/
-    │   │   ├── auth.controller.js      # signup, login, me handlers
-    │   │   ├── conversation.controller.js  # createConversation, getConversation, listConversations, sendMessage
-    │   │   └── document.controller.js  # uploadDocument, getDocumentFile, listDocuments, getDocument, updateDocument, trashDocument, restoreDocument, permanentDeleteDocument
-    │   │
-    │   ├── middleware/
-    │   │   ├── auth.middleware.js       # JWT verification + token blocklist check, attaches req.user
-    │   │   ├── error.middleware.js      # Centralized Express error handler (4-arg middleware)
-    │   │   └── upload.middleware.js     # Multer config — memory storage, 20MB limit, PDF only
-    │   │
-    │   ├── models/
-    │   │   ├── User.js                 # User schema (googleId uses partial unique index for null-safety)
-    │   │   ├── Document.js             # Document schema (with gridfsFileId, isStarred, isTrashed, etc.)
-    │   │   ├── Chunk.js                # Chunk schema (with embedding array, 768 dims)
-    │   │   ├── Conversation.js         # Conversation schema
-    │   │   └── Message.js              # Message schema (with citations)
-    │   │
-    │   ├── routes/
-    │   │   ├── auth.routes.js          # /api/auth routes (with authLimiter — relaxed in test mode)
-    │   │   ├── conversation.routes.js  # /api/conversations routes
-    │   │   ├── document.routes.js      # /api/documents routes (upload, list, get, file download, update, trash, restore, permanent delete)
-    │   │   └── health.routes.js        # GET /health
-    │   │
-    │   └── services/
-    │       ├── auth.service.js         # hashPassword, comparePassword, generateToken (with jti)
-    │       ├── chunking.service.js     # cleanText, chunkText (char-based splitting)
-    │       ├── embedding.service.js    # embedText, embedChunksForDocument (Gemini API)
-    │       ├── llm.service.js          # generateAnswer, streamAnswer (Groq API)
-    │       └── retrieval.service.js    # searchChunks (Atlas Vector Search + deduplication)
-    │
-    └── tests/
-        ├── setup.js                    # MongoMemoryServer connection (idempotent), clearCollections
-        ├── TEST-REPORT.md              # Test summary and what was fixed
-        ├── fixtures/
-        │   └── sample.pdf              # Valid minimal PDF for upload tests
-        ├── mocks/
-        │   ├── embedding.mock.js       # Returns 768-dim fake vector
-        │   ├── llm.mock.js             # Async generator yielding fake answer
-        │   ├── pdf-parse.mock.js       # Returns fixed text (bypasses Jest pdfjs crash)
-        │   └── retrieval.mock.js       # Returns fake chunks array
-        ├── auth.test.js                # 11 tests: signup, login, JWT, logout, token revocation
-        ├── documents.test.js           # 16 tests: upload, CRUD, star, trash, restore, delete, file download, ownership
-        └── chat.test.js                # 6 tests: conversation CRUD, SSE streaming, ownership
+├── backend/
+│   ├── .env                            # Live environment variables (MongoDB URI, JWT secret, API keys)
+│   ├── .env.example                    # Placeholder values for all env vars (incl. Stripe)
+│   ├── jest.config.js                  # Jest config: node env, setupFiles, 20s timeout
+│   ├── package.json                    # Dependencies and scripts (test script: jest --runInBand --detectOpenHandles --forceExit)
+│   ├── package-lock.json               # Lockfile
+│   │
+│   ├── src/
+│   │   ├── server.js                   # Entry point — Express app setup, route mounting, DB connection, CORS, error handler, Stripe webhook mount
+│   │   │
+│   │   ├── config/
+│   │   │   ├── db.js                   # MongoDB/Mongoose connection logic
+│   │   │   ├── gemini.js               # GoogleGenerativeAI client initialization
+│   │   │   ├── groq.js                 # Groq SDK client initialization
+│   │   │   ├── gridfs.js              # GridFS bucket factory (lazy init from mongoose connection, cached)
+│   │   │   ├── stripe.js              # Stripe client (null-safe if STRIPE_SECRET_KEY missing)
+│   │   │   ├── passport.js            # Google OAuth 2.0 strategy
+│   │   │   ├── planLimits.js          # Free/pro plan limits (5 docs, 50 questions/mo)
+│   │   │   └── resend.js              # UNUSED — email goes through Nodemailer (email.service.js)
+│   │   │
+│   │   ├── controllers/
+│   │   │   ├── auth.controller.js      # signup, login, logout, me, updateMe, avatar, password flows, googleCallback (NoSQL guards + generic 500s)
+│   │   │   ├── conversation.controller.js  # createConversation, getConversation, listConversations, sendMessage
+│   │   │   ├── document.controller.js  # uploadDocument, getDocumentFile, listDocuments, getDocument, updateDocument, trashDocument, restoreDocument, permanentDeleteDocument
+│   │   │   └── billing.controller.js  # getPlan, upgrade, portal, handleWebhook (6 Stripe events)
+│   │   │
+│   │   ├── middleware/
+│   │   │   ├── auth.middleware.js       # JWT verification + token blocklist check, attaches req.user
+│   │   │   ├── error.middleware.js      # Centralized Express error handler (4-arg middleware)
+│   │   │   ├── upload.middleware.js     # Multer config — memory storage, 20MB PDF limit (+ 2MB avatar image uploader)
+│   │   │   └── planLimits.middleware.js # Document/question plan-limit checks with monthly reset
+│   │   │
+│   │   ├── models/
+│   │   │   ├── User.js                 # User schema (googleId partial unique index; plan/planStatus/stripe fields)
+│   │   │   ├── Document.js             # Document schema (with gridfsFileId, isStarred, isTrashed, etc.)
+│   │   │   ├── Chunk.js                # Chunk schema (with embedding array, 768 dims)
+│   │   │   ├── Conversation.js         # Conversation schema
+│   │   │   ├── Message.js              # Message schema (with citations)
+│   │   │   └── TokenBlocklist.js       # Revoked JWT jti records (TTL auto-expiry)
+│   │   │
+│   │   ├── routes/
+│   │   │   ├── auth.routes.js          # /api/auth routes (with authLimiter — relaxed in test mode)
+│   │   │   ├── conversation.routes.js  # /api/conversations routes
+│   │   │   ├── document.routes.js      # /api/documents routes (upload, list, get, file download, update, trash, restore, permanent delete)
+│   │   │   ├── billing.routes.js       # /api/billing routes (plan, upgrade, portal — JWT-protected; webhook NOT here)
+│   │   │   └── health.routes.js        # GET /health
+│   │   │
+│   │   └── services/
+│   │       ├── auth.service.js         # hashPassword, comparePassword, generateToken (with jti)
+│   │       ├── chunking.service.js     # cleanText, chunkText (char-based splitting)
+│   │       ├── embedding.service.js    # embedText, embedChunksForDocument (Gemini API)
+│   │       ├── llm.service.js          # generateAnswer, streamAnswer (Groq API), intent classification
+│   │       ├── retrieval.service.js    # searchChunks (Atlas Vector Search + deduplication)
+│   │       ├── billing.service.js      # createCheckoutSession, createPortalSession (Stripe)
+│   │       └── email.service.js        # Nodemailer (Gmail) — password reset/change emails
+│   │
+│   └── tests/
+│       ├── setup.js                    # MongoMemoryServer connection (idempotent), clearCollections
+│       ├── TEST-REPORT.md              # Test summary and what was fixed
+│       ├── fixtures/
+│       │   └── sample.pdf              # Valid minimal PDF for upload tests
+│       ├── mocks/
+│       │   ├── embedding.mock.js       # Returns 768-dim fake vector
+│       │   ├── llm.mock.js             # Async generator yielding fake answer
+│       │   ├── pdf-parse.mock.js       # Returns fixed text (bypasses Jest pdfjs crash)
+│       │   ├── retrieval.mock.js       # Returns fake chunks array
+│       │   └── stripe.mock.js          # Mocks Stripe client methods (billing tests)
+│       ├── auth.test.js                # 12 tests: signup, login, JWT, logout, revocation, NoSQL-injection guards
+│       ├── documents.test.js           # 16 tests: upload, CRUD, star, trash, restore, delete, file download, ownership
+│       ├── chat.test.js                # 6 tests: conversation CRUD, SSE streaming, ownership
+│       └── billing.test.js             # 13 tests: plan, upgrade, portal, webhook events, plan transitions
+│
+└── frontend/
+    ├── package.json                    # React 19 + Vite; build passes; npm run lint broken (eslint config)
+    ├── vite.config.js
+    ├── eslint.config.js                # imports typescript-eslint (not installed — lint broken repo-wide)
+    └── src/
+        ├── App.jsx                     # React Router route table
+        ├── routes/                     # Pages: login, signup, dashboard, recent, starred, trash, upload, settings (billing), document chat
+        ├── components/                 # app-sidebar, top-bar, doc-card, ui/ (shadcn)
+        ├── lib/                        # api.js (fetch wrapper), auth-context.jsx, streamMessage.js (SSE), etc.
+        └── hooks/                      # use-mobile.jsx
 ```
 
 ### Folder Descriptions

@@ -20,7 +20,8 @@ DocTalk is a RAG (Retrieval-Augmented Generation) web app. Users upload a PDF, t
 - **Database:** MongoDB Atlas (Mongoose ODM)
 - **Vector search:** MongoDB Atlas Vector Search (native index on the `chunks` collection)
 - **Embeddings:** Google Gemini — model `gemini-embedding-001`, requested at 768 dimensions (`outputDimensionality: 768`)
-- **LLM (answers):** Groq — not yet integrated (see Next Steps)
+- **LLM (answers):** Groq — `llama-3.3-70b-versatile`, streamed via SSE
+- **Billing:** Stripe — hosted Checkout + Billing Portal for the Pro subscription plan (webhook-driven plan updates)
 - **Auth:** Hand-rolled JWT auth (`bcrypt` + `jsonwebtoken`) — no third-party auth provider
 - **File handling:** `multer` (memory storage) for upload, `pdf-parse@1.1.1` (pinned — v2+ has a breaking API change) for text extraction
 - **API testing:** Postman, manually, at every step
@@ -38,7 +39,11 @@ PORT=3000
 MONGODB_URI=<Atlas connection string>
 JWT_SECRET=<any random string for dev>
 GEMINI_API_KEY=<from aistudio.google.com>
-GROQ_API_KEY=<not yet used>
+GROQ_API_KEY=<from console.groq.com>
+STRIPE_SECRET_KEY=<from Stripe Dashboard>
+STRIPE_PRICE_ID=<Pro plan price id from Stripe Dashboard>
+STRIPE_WEBHOOK_SECRET=<whsec_... from stripe listen or Stripe Dashboard>
+FRONTEND_URL=<frontend origin, e.g. http://localhost:5173>
 ```
 
 **Critical gotcha:** `dotenv.config()` must be the literal first thing executed in `src/server.js`, before any other `require()`. This project already hit a real bug where `dotenv.config()` ran after other local modules were required — those modules read `process.env` values at import time and got `undefined`, silently breaking Gemini calls until this was fixed. Do not reorder imports above the dotenv call.
@@ -52,61 +57,85 @@ Run: `npm install`, then `npm run dev` (nodemon). Restart the server after any `
 ```
 backend/
 ├── src/
-│   ├── server.js                  # entry point — dotenv.config() MUST be first line
-│   ├── app.js                     # (if present) express app setup
+│   ├── server.js                  # entry point — dotenv.config() MUST be first line; mounts /api/billing/webhook with express.raw() BEFORE express.json()
 │   ├── config/
 │   │   ├── db.js                  # mongoose connection
-│   │   └── gemini.js              # GoogleGenerativeAI client init
+│   │   ├── gemini.js              # GoogleGenerativeAI client init (embedding model)
+│   │   ├── groq.js                # Groq client init (chat/LLM)
+│   │   ├── stripe.js              # Stripe client (null-safe if STRIPE_SECRET_KEY missing — app still boots)
+│   │   ├── gridfs.js              # GridFS bucket `pdfs` (lazy factory)
+│   │   ├── passport.js            # Google OAuth 2.0 strategy
+│   │   ├── planLimits.js          # free = 5 docs / 50 questions/mo, pro = unlimited
+│   │   └── resend.js              # UNUSED — email actually goes through Nodemailer (email.service.js)
 │   ├── models/
-│   │   ├── User.js                # name, email (unique), passwordHash, timestamps
-│   │   ├── Document.js            # userId, title, pageCount, status, timestamps
-│   │   └── Chunk.js                # documentId, content, pageNumber, chunkIndex, embedding[]
+│   │   ├── User.js                # name, email (unique), passwordHash, googleId, plan, planStatus, stripeCustomerId, stripeSubscriptionId, stripeSubscriptionEndsAt, monthly usage
+│   │   ├── Document.js            # userId, title, pageCount, status, starred/trashed, gridfsFileId
+│   │   ├── Chunk.js               # documentId, content, pageNumber, chunkIndex, embedding[]
+│   │   ├── Conversation.js        # userId, title, documentIds[]
+│   │   ├── Message.js             # conversationId, role, content, citations
+│   │   └── TokenBlocklist.js      # revoked JWTs (TTL expiry)
 │   ├── routes/
-│   │   ├── auth.routes.js         # /api/auth — signup, login, me
-│   │   ├── document.routes.js     # /api/documents — upload
-│   │   └── query.routes.js        # /api/query — question -> matched chunks (in progress)
+│   │   ├── auth.routes.js         # /api/auth — signup, login, logout, me, updateMe, avatar, forgot/reset/change password, Google OAuth
+│   │   ├── document.routes.js     # /api/documents — upload, list, get, download, update, trash/restore/delete
+│   │   ├── conversation.routes.js # /api/conversations — CRUD + sendMessage (SSE)
+│   │   └── billing.routes.js      # /api/billing — plan, upgrade, portal (webhook NOT here)
 │   ├── controllers/
-│   │   ├── auth.controller.js
+│   │   ├── auth.controller.js     # typeof guards on token/newPassword (NoSQL-injection safe); generic 500s
 │   │   ├── document.controller.js
-│   │   └── query.controller.js
+│   │   ├── conversation.controller.js
+│   │   └── billing.controller.js  # getPlan, upgrade, portal, handleWebhook (6 Stripe events)
 │   ├── services/
 │   │   ├── auth.service.js        # hashPassword, comparePassword, generateToken
 │   │   ├── chunking.service.js    # chunkText() — char-based splitting, ~600 char chunks, 100 overlap
 │   │   ├── embedding.service.js   # embedText(), embedChunksForDocument()
-│   │   └── retrieval.service.js   # searchChunks() — $vectorSearch aggregation (in progress)
+│   │   ├── retrieval.service.js   # searchChunks() — $vectorSearch aggregation
+│   │   ├── llm.service.js         # Groq answer generation + streaming + intent classification
+│   │   ├── billing.service.js     # createCheckoutSession, createPortalSession
+│   │   └── email.service.js       # Nodemailer (Gmail) — password reset/change emails
 │   └── middleware/
-│       ├── auth.middleware.js     # verifies JWT, sets req.user
-│       ├── upload.middleware.js   # multer config, PDF only, ~20MB limit
-│       └── error.middleware.js    # (if present) centralized error handler
+│       ├── auth.middleware.js     # verifies JWT, checks blocklist, sets req.user
+│       ├── upload.middleware.js   # multer config, PDF only, ~20MB limit (+ 2MB avatar image uploader)
+│       ├── error.middleware.js    # centralized error handler
+│       └── planLimits.middleware.js # doc/question plan-limit checks with monthly reset
+tests/                            # Jest + supertest + mongodb-memory-server (57 tests, all passing)
 ```
 
 **Request flow (upload):**
-`POST /api/documents` → auth middleware verifies token → multer parses file → `pdf-parse` extracts text per page → `chunkText()` splits each page into overlapping chunks → `Document` + `Chunk` records saved to MongoDB → `embedChunksForDocument()` runs synchronously inside the same request (calls Gemini per chunk, batched, updates each chunk with its `embedding` field) → document status set to `ready` (or `failed` if embedding throws) → response returned.
+`POST /api/documents` → auth middleware verifies token → planLimits middleware checks doc quota → multer parses file → original PDF bytes saved to GridFS → `pdf-parse` extracts text per page → `chunkText()` splits each page into overlapping chunks → `Document` + `Chunk` records saved to MongoDB → `embedChunksForDocument()` runs synchronously inside the same request (calls Gemini per chunk, batched, updates each chunk with its `embedding` field) → document status set to `ready` (or `failed` if embedding throws) → response returned.
 
-**Data model relationships:** `users` ← `documents` (via `userId`) ← `chunks` (via `documentId`). No foreign key enforcement — Mongoose/Mongo doesn't have this. Every query touching a user-owned resource must explicitly filter by `userId` in application code.
+**Request flow (chat):**
+`POST /api/conversations/:id/messages` → auth middleware → planLimits checks question quota → question embedded → `$vectorSearch` (top-5, score ≥ 0.75, scoped by documentId + ownership) → Groq classifies intent (question / summarization / small-talk) → answer streamed via SSE with page citations → question + answer + citations saved to the conversation.
+
+**Request flow (billing):**
+`POST /api/billing/upgrade` → auth middleware → creates/reuses Stripe Customer → hosted Checkout URL returned. Stripe posts webhooks to `/api/billing/webhook` (raw body, signature-verified via `constructEvent`) — 6 events handled, identity resolved ONLY from Stripe's `customer`/`client_reference_id`, always responds 200.
+
+**Data model relationships:** `users` ← `documents` (via `userId`) ← `chunks` (via `documentId`); `users` ← `conversations` (via `userId`) ← `messages` (via `conversationId`). No foreign key enforcement — Mongoose/Mongo doesn't have this. Every query touching a user-owned resource must explicitly filter by `userId` in application code.
 
 ---
 
 ## 5. Current Implementation Status
 
-Verified working end-to-end in Postman:
+Verified working end-to-end (backend tests + Postman + frontend build):
 
-- ✅ Signup (`POST /api/auth/signup`) — validates input, hashes password, returns JWT
-- ✅ Login (`POST /api/auth/login`) — verifies credentials, returns JWT
-- ✅ `/me` (`GET /api/auth/me`) — protected route, confirms middleware chain works, rejects missing/invalid tokens with 401
-- ✅ Upload (`POST /api/documents`) — protected, accepts PDF via multipart form-data (field name `file`), extracts text, chunks it, saves to MongoDB
-- ✅ Embedding — runs automatically as part of the upload flow, calls Gemini (`gemini-embedding-001`, 768 dims) in batches of 8 with a 1s delay between batches, saves `embedding` array onto each chunk
-- ✅ Atlas Vector Search index created — name `vector_index`, on `chunks` collection, path `embedding`, 768 dimensions, cosine similarity, with a `documentId` filter field
-- 🔄 Query/retrieval endpoint (`POST /api/query`) — in progress as of this writing. Intended to: verify document ownership, embed the incoming question, run `$vectorSearch` scoped by `documentId`, return matched chunks. Does NOT yet call Groq — that's a separate, later step.
+- ✅ Signup/login/logout, `/me`, Google OAuth — full auth flow returning JWT + `{ plan, planStatus, stripeSubscriptionEndsAt }`
+- ✅ Password flows — forgot / reset / change (token-based, emails via Nodemailer)
+- ✅ Upload — protected, PDF-only (20MB), GridFS storage + text extraction + chunking + Gemini embedding in one request
+- ✅ Chat — conversations, messages with citations, Groq answers streamed via SSE, multi-document conversations
+- ✅ Intent routing — question / summarization / small-talk classification in `llm.service.js`
+- ✅ Document management — list/filter, rename, star/unstar, trash/restore, permanent delete
+- ✅ Stripe billing — Checkout (`POST /api/billing/upgrade`), Billing Portal (`POST /api/billing/portal`), plan gate via `planLimits.middleware.js`
+- ✅ Stripe webhooks — 6 events handled (`checkout.session.completed`, `customer.subscription.created/updated/deleted`, `invoice.payment_succeeded/failed`), renewal date stored on user
+- ✅ Frontend wired to the real API — dashboard, document lists, upload, settings (Profile/Appearance/Pricing & Billing), document chat with streaming
+- ✅ Security hardening (auth only) — `typeof` guards on `token`/`newPassword` (NoSQL-injection safe), generic 500s (no `error.message` leakage) in `auth.controller.js`
+- ✅ Backend test suite — 57 tests across auth/chat/documents/billing, all passing (Jest + mongodb-memory-server)
+- ✅ Frontend build — `vite build` passes
 
-Not yet built:
+Still open / known gaps:
 
-- Groq LLM integration (turning matched chunks + question into an actual answer)
-- Conversations/messages persistence (chat history)
-- Streaming responses
-- Document management endpoints (list, rename, star, trash, restore, delete)
-- Any file storage (raw PDF bytes are currently discarded after text extraction — not saved anywhere)
-- Frontend wiring (frontend exists separately via Lovable, not yet connected)
+- 🔄 `npm run lint` is broken **repo-wide** (frontend) — `eslint.config.js` imports `typescript-eslint` which isn't installed. Not a code issue; fix the eslint config or install the package.
+- 🔄 `npm audit` — frontend: `react-router-dom@7.18.1` flagged (GHSA-qwww-vcr4-c8h2, CSRF via RSC mode; low practical impact for this SPA — upgrade when possible). Backend: high-severity advisories are **dev-only** (jest → brace-expansion/minimatch/glob chain).
+- 🔄 Stripe webhook processing needs live testing with `stripe listen` (signature verification untested against a real secret).
+- 🔄 Security hardening not yet applied beyond auth.controller — see Known Issues.
 
 ---
 
@@ -120,19 +149,20 @@ Not yet built:
 6. **Duplicate-email signup returned 401 instead of 400/409 at one point** — check current behavior; 409 is correct (conflict), not 401 (unauthorized) or 500.
 7. **Database name is `test`** — MongoDB's default when no database name is specified in the connection string. Functionally fine, but worth being aware of; wasn't deliberately named `doctalk`.
 8. **Windows dev environment** — Naveed is on Windows/PowerShell, not Mac/Linux. Do not suggest `pkill`, `lsof`, or other Unix-only commands. Use `netstat -ano | findstr :<port>` and `taskkill /PID <pid> /F` (or `taskkill /IM node.exe /F`) instead.
+9. **NoSQL injection via query operators** — resetPassword/confirmPasswordChange used to pass a user-controlled `token` straight into a Mongo query, so `{"$ne": null}` etc. matched arbitrary users. Now guarded with `typeof` checks (fixed + regression-tested). Any new code that queries on a request-supplied value must `typeof`-guard it before the query.
+10. **Raw `error.message` leaks in non-auth controllers** — `document.controller.js`, `conversation.controller.js`, `billing.controller.js` still return internal error messages (e.g. via a generic `catch (error) { next(new Error(error.message)) }` pattern). Only `auth.controller.js` has been hardened to generic 500s. Same treatment should be applied elsewhere.
+11. **No security headers / OAuth state** — `helmet`/CSP not installed; Google OAuth has no `state` param (CSRF); JWT is read from `localStorage` and passed as a URL query param in the OAuth callback redirect (could land in server logs / history).
+12. **Env-var change requires restart** — no hot-reload of `.env`; `dotenv.config()` runs once at server start (see #1).
 
 ---
 
 ## 7. Next Steps (in order)
 
-1. Finish and verify the query/retrieval endpoint (`POST /api/query`) — question in, matched chunks out, no LLM yet.
-2. Integrate Groq — build the prompt (system instructions + retrieved chunk content with page numbers + question), call Groq's chat completions, return an answer.
-3. Add streaming — Groq response should stream back to the client token-by-token, not wait for the full completion. This is a stated differentiator for the portfolio, build it in now rather than retrofitting later.
-4. Add conversations/messages persistence — save question/answer pairs, support multi-document conversations (`documentIds` as an array from the start).
-5. Add citations — track which chunks were actually used in an answer, return `{ page, chunkId }` references alongside the answer text.
-6. Document management endpoints — list, rename, star/unstar, trash, restore, permanent delete.
-7. Only after all of the above are verified in Postman — wire up the Lovable-generated frontend.
-8. Write the README explaining chunking strategy, embedding model choice, vector search design, and the hand-rolled auth tradeoff (no DB-level row security like Supabase RLS — enforcement is entirely in application code).
+1. **Live-test Stripe webhooks** with `stripe listen` + a test-mode Checkout — verify signature verification and the full checkout → webhook → plan=pro flow against a real Stripe secret.
+2. **Security hardening pass** — apply the auth.controller pattern everywhere: `typeof` guards on all user-supplied query values, generic 500s in document/conversation/billing controllers, add `helmet` (CSP), add OAuth `state`, stop putting the JWT in URLs.
+3. **Fix `npm run lint`** (frontend) — `eslint.config.js` imports `typescript-eslint` which isn't installed; install the package or fix the config so lint actually runs.
+4. **Upgrade `react-router-dom`** past 7.18.1 (or verify the GHSA-qwww-vcr4-c8h2 impact doesn't apply) to clear the audit warning.
+5. **Write the README** explaining chunking strategy, embedding model choice, vector search design, the hand-rolled auth tradeoff (no DB-level row security — enforcement is entirely in application code), and how Stripe billing is wired (webhook-driven plan updates, hosted Checkout/Portal).
 
 ---
 
@@ -141,6 +171,8 @@ Not yet built:
 - **Layered structure:** routes → controllers → services → models. Controllers stay thin (parse request, call service, shape response). Business logic lives in services.
 - **Every protected route** uses `auth.middleware.js`; it attaches `req.user.id` from a verified JWT.
 - **Error handling:** controllers use try/catch, pass errors to `next(err)` for the centralized error handler, except for deliberate expected-case status codes (400 validation, 401 auth, 404 not found/not owned, 409 conflict) which are returned directly.
+- **Security-first rules:** `typeof`-guard ANY user-supplied value before it goes into a Mongo query (NoSQL injection); return generic `"Something went wrong"` 500s in production paths (no `error.message`); never return `passwordHash` or Stripe IDs in API responses; resolve Stripe webhook identity ONLY from `event.data.object.customer`/`client_reference_id`; the webhook route must NOT be behind JWT auth and MUST use a raw body parser + `constructEvent` verification.
+- **Billing state comes from Stripe webhooks, not from Checkout return redirects** — the `?upgraded=true` frontend flag is cosmetic only; `plan`/`planStatus`/`stripeSubscriptionEndsAt` are authoritative only after a verified webhook writes them.
 - **Never return `passwordHash`** (or any sensitive field) in an API response.
 - **All Mongo queries on user-owned data must filter by `userId`** (or the parent resource's `userId`) — never fetch by `_id` alone on documents, chunks, conversations, or messages.
 - **Async/await throughout** — no raw `.then()` chains.

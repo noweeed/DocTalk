@@ -32,6 +32,15 @@ const starters = [
   "Summarize this document",
 ];
 
+const formatPageLabel = (page) => {
+  const value = String(page);
+  if (value.includes("-")) {
+    const [min, max] = value.split("-");
+    return `Pages #${min}-#${max}`;
+  }
+  return `Page #${value}`;
+};
+
 export default function DocumentChat() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -144,7 +153,7 @@ export default function DocumentChat() {
           text: m.content,
           streaming: false,
           citations: (m.citations || []).map((c) => ({
-            page: c.pageNumber,
+            page: c.pageNumber ?? c.page,
             chunkId: c.chunkIndex,
             score: c.score,
             note: c.note,
@@ -184,7 +193,7 @@ export default function DocumentChat() {
                   ...msg,
                   streaming: false,
                   citations: matchedChunks.map((c) => ({
-                    page: c.pageNumber,
+                    page: c.pageNumber ?? c.page,
                     chunkId: c.chunkIndex,
                     score: c.score,
                     note: c.note,
@@ -360,6 +369,7 @@ export default function DocumentChat() {
               ask={ask}
               jumpToPage={jumpToPage}
               chatEndRef={chatEndRef}
+              docTitle={doc?.title}
             />
           </aside>
         )}
@@ -375,6 +385,7 @@ export default function DocumentChat() {
             ask={ask}
             jumpToPage={jumpToPage}
             chatEndRef={chatEndRef}
+            docTitle={doc?.title}
           />
         </div>
       )}
@@ -382,13 +393,13 @@ export default function DocumentChat() {
   );
 }
 
-function ChatPanel({ messages, streaming, input, setInput, ask, jumpToPage, chatEndRef }) {
+function ChatPanel({ messages, streaming, input, setInput, ask, jumpToPage, chatEndRef, docTitle }) {
   return (
     <>
       <div className="flex items-center gap-1.5 border-b border-border px-3 py-2">
-        <span className="inline-flex max-w-[180px] shrink-0 items-center gap-1.5 rounded-full border border-border bg-accent/50 py-1 pl-2 pr-1 text-xs text-foreground">
+        <span className="inline-flex max-w-[220px] shrink-0 items-center gap-1.5 rounded-full border border-border bg-accent/50 py-1 pl-2 pr-1 text-xs text-foreground">
           <FileText className="h-3 w-3 text-primary" />
-          <span className="truncate">Current document</span>
+          <span className="truncate">{docTitle || "Current document"}</span>
         </span>
       </div>
 
@@ -436,7 +447,7 @@ function ChatPanel({ messages, streaming, input, setInput, ask, jumpToPage, chat
                         <span className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 animate-pulse bg-primary" />
                       )}
                     </div>
-                    {!m.streaming && m.citations && m.citations.length > 0 && (
+                    {!m.streaming && m.citations?.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {m.citations.map((c, i) =>
                           c.note === "full document" ? (
@@ -444,7 +455,7 @@ function ChatPanel({ messages, streaming, input, setInput, ask, jumpToPage, chat
                               key={i}
                               className="rounded-md border border-border bg-card px-2 py-0.5 text-[11px] text-muted-foreground"
                             >
-                              pp. {c.page}
+                              {formatPageLabel(c.page)}
                             </span>
                           ) : (
                             <button
@@ -452,9 +463,9 @@ function ChatPanel({ messages, streaming, input, setInput, ask, jumpToPage, chat
                               onClick={() => jumpToPage(c.page)}
                               className="rounded-md border border-border bg-card px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
                             >
-                              p. {c.page}
+                              {formatPageLabel(c.page)}
                             </button>
-                          )
+                          ),
                         )}
                       </div>
                     )}

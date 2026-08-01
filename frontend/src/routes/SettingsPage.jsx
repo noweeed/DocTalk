@@ -15,9 +15,27 @@ const tabs = [
 ];
 
 export default function SettingsPage() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
+  const upgraded = searchParams.get("upgraded");
+  const { refreshUser } = useAuth();
   const [tab, setTab] = useState("profile");
+
+  useEffect(() => {
+    if (upgraded === "true") {
+      toast.success("Welcome to Pro! Your subscription is active.");
+      refreshUser();
+      setTab("billing");
+    } else if (upgraded === "false") {
+      toast.info("Upgrade cancelled — you can try again anytime.");
+    }
+
+    if (upgraded) {
+      const params = new URLSearchParams(searchParams);
+      params.delete("upgraded");
+      setSearchParams(params, { replace: true });
+    }
+  }, [upgraded]);
 
   useEffect(() => {
     if (tabParam && tabs.some((t) => t.id === tabParam)) {
@@ -182,10 +200,16 @@ function ProfileTab() {
           </div>
           <div className="rounded-lg border border-border bg-background px-3 py-2.5">
             <div className="text-xs font-medium text-muted-foreground">Questions this month</div>
-            <div className="mt-0.5 text-sm font-semibold text-foreground">
-              {user?.questionsUsedThisMonth ?? "—"} / {user?.plan === "pro" ? "∞" : "50"}
-              {user?.usageResetAt ? <span className="ml-1 text-xs font-normal text-muted-foreground">resets {formatDate(user.usageResetAt)}</span> : null}
-            </div>
+          <div className="mt-0.5 text-sm font-semibold text-foreground">
+            {user?.questionsUsedThisMonth ?? "—"} / {user?.plan === "pro" ? "∞" : "50"}
+            {user?.plan === "pro"
+              ? user?.stripeSubscriptionEndsAt
+                ? <span className="ml-1 text-xs font-normal text-muted-foreground">renews {formatDate(user.stripeSubscriptionEndsAt)}</span>
+                : null
+              : user?.usageResetAt
+                ? <span className="ml-1 text-xs font-normal text-muted-foreground">resets {formatDate(user.usageResetAt)}</span>
+                : null}
+          </div>
           </div>
         </div>
 
@@ -281,18 +305,52 @@ function SunIcon() {
 }
 
 function BillingTab() {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const isPro = user?.plan === "pro";
+  const isPastDue = user?.planStatus === "past_due";
+
+  const goTo = async (path) => {
+    setLoading(true);
+    try {
+      const { url } = await api.post(path);
+      window.location.href = url;
+    } catch (err) {
+      toast.error(err.message);
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-base font-semibold tracking-tight text-foreground">Choose your plan</h2>
         <p className="mt-1 text-sm text-muted-foreground">Upgrade anytime. Cancel anytime.</p>
       </div>
+
+      {isPastDue && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+          <div className="text-sm text-foreground">
+            <span className="font-semibold">Your payment failed.</span> Update your payment method to keep
+            Pro access.
+          </div>
+          <button
+            onClick={() => goTo("/api/billing/portal")}
+            disabled={loading}
+            className="rounded-lg border border-destructive/40 px-3 py-1.5 text-sm font-medium text-foreground hover:bg-destructive/10 disabled:opacity-60"
+          >
+            Update payment method
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <PlanCard
           name="Free"
           price="$0"
           features={["5 documents", "50 questions / month", "Standard model", "Email support"]}
-          current
+          current={!isPro}
+          hideAction={isPro}
         />
         <PlanCard
           name="Pro"
@@ -305,13 +363,18 @@ function BillingTab() {
             "Multi-document chat",
             "Priority support",
           ]}
+          current={isPro}
+          actionLabel="Upgrade to Pro"
+          onClick={() => goTo("/api/billing/upgrade")}
+          onManage={isPro ? () => goTo("/api/billing/portal") : null}
+          loading={loading}
         />
       </div>
     </div>
   );
 }
 
-function PlanCard({ name, price, features, highlight, current }) {
+function PlanCard({ name, price, features, highlight, current, actionLabel, onClick, onManage, loading, hideAction }) {
   return (
     <div
       className={cn(
@@ -339,19 +402,31 @@ function PlanCard({ name, price, features, highlight, current }) {
           </li>
         ))}
       </ul>
-      <button
-        disabled={current}
-        className={cn(
-          "mt-6 h-10 rounded-lg text-sm font-medium transition-colors",
-          current
-            ? "cursor-not-allowed border border-border text-muted-foreground"
-            : highlight
-              ? "gradient-primary text-primary-foreground shadow-glow hover:brightness-110"
-              : "border border-border text-foreground hover:bg-accent",
-        )}
-      >
-        {current ? "Current plan" : `Upgrade to ${name}`}
-      </button>
+      {!hideAction && (
+        <button
+          disabled={current || loading}
+          onClick={onClick}
+          className={cn(
+            "mt-6 h-10 rounded-lg text-sm font-medium transition-colors",
+            current
+              ? "cursor-not-allowed border border-border text-muted-foreground"
+              : highlight
+                ? "gradient-primary text-primary-foreground shadow-glow hover:brightness-110"
+                : "border border-border text-foreground hover:bg-accent",
+          )}
+        >
+          {loading ? "Redirecting…" : current ? "Current plan" : actionLabel}
+        </button>
+      )}
+      {current && onManage && (
+        <button
+          onClick={onManage}
+          disabled={loading}
+          className="mt-2 h-9 w-full rounded-lg border border-border text-sm font-medium text-foreground hover:bg-accent disabled:opacity-60"
+        >
+          Manage subscription
+        </button>
+      )}
     </div>
   );
 }

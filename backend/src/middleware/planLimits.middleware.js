@@ -26,7 +26,8 @@ const checkDocumentLimit = async (req, res, next) => {
     req.userDoc = userDoc;
     next();
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("[planLimits.middleware]", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
 
@@ -65,7 +66,8 @@ const checkQuestionLimit = async (req, res, next) => {
     req.userDoc = userDoc;
     next();
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("[planLimits.middleware]", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
 

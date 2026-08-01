@@ -2,16 +2,19 @@ const crypto = require("crypto");
 const User = require("../models/User");
 const Document = require("../models/Document");
 const TokenBlocklist = require("../models/TokenBlocklist");
+const OAuthExchangeCode = require("../models/OAuthExchangeCode");
 const {
   hashPassword,
   comparePassword,
   generateToken,
 } = require("../services/auth.service");
 const { sendPasswordResetEmail, sendPasswordChangeConfirmation } = require("../services/email.service");
+const { isImageBuffer } = require("../services/fileValidation");
 const getGridFSBucket = require("../config/gridfs");
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+const OAUTH_EXCHANGE_CODE_TTL_MS = 60 * 1000;
 
 const signup = async (req, res) => {
   try {
@@ -49,18 +52,24 @@ const signup = async (req, res) => {
         name: user.name,
         email: user.email,
         plan: user.plan,
+        planStatus: user.planStatus,
         avatarUrl: user.avatarUrl,
         createdAt: user.createdAt,
       },
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("[auth.controller]", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
 
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
+
+    if (typeof email !== "string" || typeof password !== "string") {
+      return res.status(400).json({ message: "Invalid request" });
+    }
 
     if (!email || !password) {
       return res.status(400).json({ message: "All fields are required" });
@@ -85,11 +94,13 @@ const login = async (req, res) => {
         name: user.name,
         email: user.email,
         plan: user.plan,
+        planStatus: user.planStatus,
         avatarUrl: user.avatarUrl,
       },
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("[auth.controller]", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
 
@@ -102,17 +113,66 @@ const logout = async (req, res) => {
 
     res.json({ message: "Logged out successfully" });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("[auth.controller]", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
 
 const googleCallback = async (req, res) => {
   try {
     const token = generateToken(req.user._id);
+    const code = crypto.randomUUID();
 
-    res.redirect(`${process.env.FRONTEND_URL}/oauth/callback?token=${token}`);
+    await OAuthExchangeCode.create({
+      code,
+      token,
+      userId: req.user._id,
+      expiresAt: new Date(Date.now() + OAUTH_EXCHANGE_CODE_TTL_MS),
+    });
+
+    res.redirect(`${process.env.FRONTEND_URL}/oauth/callback?code=${code}`);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("[auth.controller]", error);
+    res.status(500).json({ message: "Something went wrong" });
+  }
+};
+
+const exchangeOAuthCode = async (req, res) => {
+  try {
+    const { code } = req.body;
+
+    if (typeof code !== "string" || !code) {
+      return res.status(400).json({ message: "Invalid or expired code" });
+    }
+
+    const record = await OAuthExchangeCode.findOneAndDelete({
+      code,
+      expiresAt: { $gt: new Date() },
+    });
+
+    if (!record) {
+      return res.status(400).json({ message: "Invalid or expired code" });
+    }
+
+    const user = await User.findById(record.userId);
+    if (!user) {
+      return res.status(400).json({ message: "Invalid or expired code" });
+    }
+
+    res.json({
+      token: record.token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        plan: user.plan,
+        planStatus: user.planStatus,
+        avatarUrl: user.avatarUrl,
+      },
+    });
+  } catch (error) {
+    console.error("[auth.controller]", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
 
@@ -146,6 +206,8 @@ const me = async (req, res) => {
       name: user.name,
       email: user.email,
       plan: user.plan,
+      planStatus: user.planStatus,
+      stripeSubscriptionEndsAt: user.stripeSubscriptionEndsAt,
       avatarUrl: user.avatarUrl,
       documentsCount: docCount,
       storageUsedBytes,
@@ -154,7 +216,8 @@ const me = async (req, res) => {
       createdAt: user.createdAt,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("[auth.controller]", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
 
@@ -194,6 +257,8 @@ const updateMe = async (req, res) => {
       name: user.name,
       email: user.email,
       plan: user.plan,
+      planStatus: user.planStatus,
+      stripeSubscriptionEndsAt: user.stripeSubscriptionEndsAt,
       avatarUrl: user.avatarUrl,
       documentsCount: await Document.countDocuments({ userId: req.user.id, isTrashed: false }),
       storageUsedBytes,
@@ -201,7 +266,8 @@ const updateMe = async (req, res) => {
       usageResetAt: user.usageResetAt,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("[auth.controller]", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
 
@@ -229,13 +295,18 @@ const requestPasswordChange = async (req, res) => {
 
     res.json({ message: "Check your email for a link to continue changing your password." });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("[auth.controller]", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
 
 const confirmPasswordChange = async (req, res) => {
   try {
     const { token, newPassword } = req.body;
+
+    if (typeof token !== "string" || typeof newPassword !== "string") {
+      return res.status(400).json({ message: "Invalid request" });
+    }
 
     if (!token || !newPassword) {
       return res.status(400).json({ message: "Token and new password are required" });
@@ -264,7 +335,8 @@ const confirmPasswordChange = async (req, res) => {
 
     res.json({ message: "Password changed successfully" });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("[auth.controller]", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
 
@@ -294,13 +366,18 @@ const forgotPassword = async (req, res) => {
 
     res.json({ message: "If the email exists, a reset link has been sent" });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("[auth.controller]", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
 
 const resetPassword = async (req, res) => {
   try {
     const { token, newPassword } = req.body;
+
+    if (typeof token !== "string" || typeof newPassword !== "string") {
+      return res.status(400).json({ message: "Invalid request" });
+    }
 
     if (!token || !newPassword) {
       return res.status(400).json({ message: "Token and new password are required" });
@@ -329,7 +406,8 @@ const resetPassword = async (req, res) => {
 
     res.json({ message: "Password reset successfully" });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("[auth.controller]", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
 
@@ -337,6 +415,10 @@ const uploadAvatar = async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    if (!isImageBuffer(req.file.buffer)) {
+      return res.status(400).json({ message: "Invalid image file" });
     }
 
     const avatarBase64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
@@ -353,7 +435,8 @@ const uploadAvatar = async (req, res) => {
 
     res.json({ avatarUrl: user.avatarUrl });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("[auth.controller]", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
 
@@ -362,6 +445,7 @@ module.exports = {
   login,
   logout,
   googleCallback,
+  exchangeOAuthCode,
   me,
   updateMe,
   requestPasswordChange,

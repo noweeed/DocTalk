@@ -92,9 +92,50 @@ const streamSummarization = async function* (question, context) {
   }
 };
 
+const streamSmallTalk = async function* (question) {
+  const messages = [
+    { role: "system", content: SYSTEM_PROMPT },
+    { role: "user", content: question },
+  ];
+
+  const response = await groq.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    messages,
+    temperature: 0.3,
+    max_tokens: 1024,
+    stream: true,
+  });
+
+  for await (const chunk of response) {
+    const text = chunk.choices[0]?.delta?.content;
+    if (text) yield text;
+  }
+};
+
+const CLASSIFY_SYSTEM_PROMPT = `You decide whether a user message is small talk or a real question about a document.
+Reply with exactly one word: "QUESTION" if the message asks for information or refers to the content of a document.
+Reply with "SMALL_TALK" if it is a greeting, thanks, praise, acknowledgement, or casual chat with no request for information.`;
+
+const classifyMessage = async (question) => {
+  const response = await groq.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    messages: [
+      { role: "system", content: CLASSIFY_SYSTEM_PROMPT },
+      { role: "user", content: question },
+    ],
+    temperature: 0,
+    max_tokens: 10,
+  });
+
+  const label = (response.choices[0]?.message?.content || "").trim().toUpperCase();
+  return label.includes("SMALL_TALK") ? "SMALL_TALK" : "QUESTION";
+};
+
 module.exports = {
   generateAnswer,
+  classifyMessage,
   streamAnswer,
   streamSummarization,
+  streamSmallTalk,
   NO_CONTEXT_ANSWER,
 };

@@ -1,13 +1,35 @@
-const pdfParse = require("pdf-parse");
 const Document = require("../models/Document");
 const Chunk = require("../models/Chunk");
-const { chunkText, cleanText } = require("../services/chunking.service");
+const { extractPageTexts, chunkPages } = require("../services/chunking.service");
 const { embedChunksForDocument } = require("../services/embedding.service");
+const { isPdfBuffer } = require("../services/fileValidation");
 const getGridFSBucket = require("../config/gridfs");
+
+// L2: Build a safe Content-Disposition header from a client-supplied filename.
+// The ASCII `filename=` fallback strips anything that could break the
+// quoted-string form; `filename*=UTF-8''...` (RFC 5987) carries the real name
+// percent-encoded so browsers render it correctly.
+const buildContentDisposition = (title) => {
+  const asciiFallback =
+    String(title || "")
+      .replace(/[^\x20-\x7E]/g, "_")
+      .replace(/["\\]/g, "_")
+      .replace(/[\r\n]/g, "")
+      .trim() || "download.pdf";
+  const encoded = encodeURIComponent(String(title || "")).replace(
+    /['()*]/g,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`
+  );
+  return `inline; filename="${asciiFallback}"; filename*=UTF-8''${encoded}`;
+};
 
 const uploadDocument = async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: "No file uploaded" });
+  }
+
+  if (!isPdfBuffer(req.file.buffer)) {
+    return res.status(400).json({ message: "Invalid PDF file" });
   }
 
   const document = await Document.create({
@@ -31,30 +53,17 @@ const uploadDocument = async (req, res) => {
 
     document.gridfsFileId = uploadStream.id;
 
-    const pdfData = await pdfParse(req.file.buffer);
-    const pages = pdfData.text.split(/\f/).filter((p) => p.trim());
-    const allChunks = [];
-
-    pages.forEach((pageText, i) => {
-      const pageNumber = i + 1;
-      const cleaned = cleanText(pageText);
-      const textChunks = chunkText(cleaned);
-
-      textChunks.forEach((content, chunkIndex) => {
-        allChunks.push({
-          documentId: document._id,
-          content,
-          pageNumber,
-          chunkIndex,
-        });
-      });
-    });
+    const { numpages, pageTexts } = await extractPageTexts(req.file.buffer);
+    const allChunks = chunkPages(pageTexts).map((chunk) => ({
+      documentId: document._id,
+      ...chunk,
+    }));
 
     if (allChunks.length > 0) {
       await Chunk.insertMany(allChunks);
     }
 
-    document.pageCount = pdfData.numpages;
+    document.pageCount = numpages;
     await document.save();
 
     await embedChunksForDocument(document._id);
@@ -72,7 +81,8 @@ const uploadDocument = async (req, res) => {
     document.status = "failed";
     await document.save();
 
-    res.status(500).json({ message: error.message });
+    console.error("[document.controller]", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
 
@@ -96,7 +106,7 @@ const getDocumentFile = async (req, res) => {
 
     res.set({
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${document.title}"`,
+      "Content-Disposition": buildContentDisposition(document.title),
     });
 
     downloadStream.on("error", () => {
@@ -105,7 +115,8 @@ const getDocumentFile = async (req, res) => {
 
     downloadStream.pipe(res);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("[document.controller]", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
 
@@ -137,7 +148,8 @@ const listDocuments = async (req, res) => {
 
     res.status(200).json(documents);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("[document.controller]", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
 
@@ -157,7 +169,8 @@ const getDocument = async (req, res) => {
 
     res.status(200).json(document);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("[document.controller]", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
 
@@ -181,7 +194,8 @@ const updateDocument = async (req, res) => {
 
     res.status(200).json(document);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("[document.controller]", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
 
@@ -202,7 +216,8 @@ const trashDocument = async (req, res) => {
 
     res.status(200).json({ message: "Document moved to trash" });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("[document.controller]", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
 
@@ -223,7 +238,8 @@ const restoreDocument = async (req, res) => {
 
     res.status(200).json(document);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("[document.controller]", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
 
@@ -253,7 +269,8 @@ const permanentDeleteDocument = async (req, res) => {
 
     res.status(200).json({ message: "Document permanently deleted" });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("[document.controller]", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
 

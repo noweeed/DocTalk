@@ -1,13 +1,12 @@
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
 const dotenv = require("dotenv");
 const passport = require("passport");
 const rateLimit = require("express-rate-limit");
-const dns = require("dns");
 
 dotenv.config();
 
-dns.setServers(["1.1.1.1", "1.0.0.1"]);
 const connectDB = require("./config/db");
 const configurePassport = require("./config/passport");
 const authRoutes = require("./routes/auth.routes");
@@ -15,9 +14,15 @@ const documentRoutes = require("./routes/document.routes");
 const conversationRoutes = require("./routes/conversation.routes");
 const healthRoutes = require("./routes/health.routes");
 const billingRoutes = require("./routes/billing.routes");
+const { handleWebhook } = require("./controllers/billing.controller");
 const errorHandler = require("./middleware/error.middleware");
 
 const app = express();
+
+// Trust exactly one upstream reverse proxy / load balancer hop so req.ip
+// reflects the real client address instead of the proxy's, keeping the
+// IP-based rate limiters effective behind a single proxy.
+app.set("trust proxy", 1);
 
 app.use(
   cors({
@@ -25,6 +30,30 @@ app.use(
     credentials: true,
   }),
 );
+
+// Baseline security headers. This API only returns JSON/SSE/PDF streams (no
+// HTML pages), so a strict `default-src 'none'` is sufficient; `connect-src
+// 'self'` covers the API's own fetch/SSE usage. helmet's other defaults
+// (X-Content-Type-Options, X-Frame-Options, Strict-Transport-Security, ...)
+// remain enabled and are not disabled here.
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        defaultSrc: ["'none'"],
+        connectSrc: ["'self'"],
+      },
+    },
+  }),
+);
+
+app.post(
+  "/api/billing/webhook",
+  express.raw({ type: "application/json" }),
+  handleWebhook,
+);
+
 app.use(express.json());
 app.use(passport.initialize());
 

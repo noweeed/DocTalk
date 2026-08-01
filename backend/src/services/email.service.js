@@ -10,6 +10,14 @@ const transporter = nodemailer.createTransport({
 
 const FROM = '"DocTalk" <doctalk.service@gmail.com>';
 
+const logEmailError = (tag, err) => {
+  if (process.env.NODE_ENV === "production") {
+    console.error(tag, { name: err && err.name, code: err && err.code });
+  } else {
+    console.error(tag, err);
+  }
+};
+
 async function sendPasswordResetEmail(toEmail, resetLink) {
   try {
     await transporter.sendMail({
@@ -23,7 +31,7 @@ async function sendPasswordResetEmail(toEmail, resetLink) {
       `,
     });
   } catch (err) {
-    console.error("[email] Nodemailer error (password reset):", err);
+    logEmailError("[email] Nodemailer error (password reset):", err);
     throw new Error("Failed to send password reset email");
   }
 }
@@ -41,7 +49,7 @@ async function sendPasswordChangeConfirmation(toEmail, confirmLink) {
       `,
     });
   } catch (err) {
-    console.error("[email] Nodemailer error (password change):", err);
+    logEmailError("[email] Nodemailer error (password change):", err);
     throw new Error("Failed to send password change confirmation email");
   }
 }
