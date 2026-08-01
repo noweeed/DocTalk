@@ -22,6 +22,17 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { documentsApi } from "@/lib/documents";
@@ -60,6 +71,9 @@ export default function DocumentChat() {
   const [page, setPage] = useState(1);
   const [zoom, setZoom] = useState(100);
   const [flashPage, setFlashPage] = useState(null);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const containerRef = useRef(null);
   const dragging = useRef(false);
@@ -232,6 +246,20 @@ export default function DocumentChat() {
     }
   };
 
+  const saveRename = async () => {
+    const trimmed = renameValue.trim();
+    if (!trimmed) return;
+    try {
+      await documentsApi.update(id, { title: trimmed });
+      setTitle(trimmed);
+      setDoc((d) => (d ? { ...d, title: trimmed } : d));
+      toast.success("Renamed");
+      setRenameOpen(false);
+    } catch (err) {
+      toast.error(err.message || "Failed to rename");
+    }
+  };
+
   const toggleStar = async () => {
     const next = !doc?.isStarred;
     try {
@@ -351,8 +379,8 @@ export default function DocumentChat() {
           <DropdownMenuContent align="end">
             <DropdownMenuItem
               onSelect={() => {
-                titleInputRef.current?.focus();
-                titleInputRef.current?.select();
+                setRenameValue(title);
+                setRenameOpen(true);
               }}
             >
               Rename
@@ -360,7 +388,7 @@ export default function DocumentChat() {
             <DropdownMenuItem onSelect={toggleStar}>{doc?.isStarred ? "Unstar" : "Star"}</DropdownMenuItem>
             <DropdownMenuItem onSelect={downloadDoc}>Download</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={trashDoc} className="text-destructive focus:text-destructive">
+            <DropdownMenuItem onSelect={() => setDeleteOpen(true)} className="text-destructive focus:text-destructive">
               Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -457,6 +485,54 @@ export default function DocumentChat() {
           />
         </div>
       )}
+
+      <AlertDialog open={renameOpen} onOpenChange={setRenameOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rename document</AlertDialogTitle>
+            <AlertDialogDescription>Enter a new title for this document.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                saveRename();
+              }
+            }}
+            placeholder="Document title"
+            autoFocus
+            onFocus={(e) => e.target.select()}
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={saveRename} disabled={!renameValue.trim()}>
+              Save
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete document?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Move "{title}" to trash? You can restore it from the trash within 30 days.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={trashDoc}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
