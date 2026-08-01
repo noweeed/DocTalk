@@ -64,6 +64,7 @@ export default function DocumentChat() {
   const containerRef = useRef(null);
   const dragging = useRef(false);
   const chatEndRef = useRef(null);
+  const titleInputRef = useRef(null);
 
   useEffect(() => {
     const onMove = (e) => {
@@ -218,6 +219,56 @@ export default function DocumentChat() {
     setStreaming(false);
   }
 
+  const saveTitle = async () => {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    try {
+      await documentsApi.update(id, { title: trimmed });
+      setDoc((d) => (d ? { ...d, title: trimmed } : d));
+      toast.success("Title saved");
+    } catch (err) {
+      setTitle(doc?.title ?? "");
+      toast.error(err.message || "Failed to save title");
+    }
+  };
+
+  const toggleStar = async () => {
+    const next = !doc?.isStarred;
+    try {
+      await documentsApi.update(id, { isStarred: next });
+      setDoc((d) => (d ? { ...d, isStarred: next } : d));
+      toast.success(next ? "Starred" : "Unstarred");
+    } catch (err) {
+      toast.error(err.message || "Failed to update star");
+    }
+  };
+
+  const downloadDoc = async () => {
+    try {
+      const blob = await documentsApi.getFileBlob(id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${doc?.title || "document"}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error(err.message || "Failed to download");
+    }
+  };
+
+  const trashDoc = async () => {
+    try {
+      await documentsApi.trash(id);
+      toast.success("Moved to trash");
+      navigate("/recent");
+    } catch (err) {
+      toast.error(err.message || "Failed to delete");
+    }
+  };
+
   const jumpToPage = (p) => {
     setPage(p);
     setFlashPage(p);
@@ -274,8 +325,16 @@ export default function DocumentChat() {
           <ArrowLeft className="h-4 w-4" />
         </button>
         <input
+          ref={titleInputRef}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
+          onBlur={saveTitle}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.target.blur();
+            }
+          }}
           className="min-w-0 flex-1 truncate rounded-md bg-transparent px-2 py-1 text-sm font-medium text-foreground hover:bg-accent focus:bg-accent focus:outline-none"
         />
         <button
@@ -290,11 +349,20 @@ export default function DocumentChat() {
             <MoreHorizontal className="h-4 w-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem>Rename</DropdownMenuItem>
-            <DropdownMenuItem>Star</DropdownMenuItem>
-            <DropdownMenuItem>Download</DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => {
+                titleInputRef.current?.focus();
+                titleInputRef.current?.select();
+              }}
+            >
+              Rename
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={toggleStar}>{doc?.isStarred ? "Unstar" : "Star"}</DropdownMenuItem>
+            <DropdownMenuItem onSelect={downloadDoc}>Download</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive focus:text-destructive">Delete</DropdownMenuItem>
+            <DropdownMenuItem onSelect={trashDoc} className="text-destructive focus:text-destructive">
+              Delete
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
