@@ -82,7 +82,7 @@ const PORT = process.env.PORT || 3001;
 const start = async () => {
   try {
     await connectDB();
-    app.listen(PORT, () => {
+    app.listen(PORT, "0.0.0.0", () => {
       console.log(`Server running on ${PORT}`);
     });
   } catch (error) {
