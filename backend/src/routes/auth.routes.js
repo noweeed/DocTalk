@@ -88,6 +88,7 @@ router.get("/google", (req, res, next) => {
 
   res.cookie("oauth_state", state, {
     httpOnly: true,
+    secure: true,
     sameSite: "lax",
     maxAge: OAUTH_STATE_TTL_MS,
     path: "/api/auth/google",
@@ -107,6 +108,11 @@ router.get(
     res.clearCookie("oauth_state", { path: "/api/auth/google" });
 
     if (!cookieState || !req.query.state || cookieState !== req.query.state) {
+      console.warn("[oauth] state mismatch", {
+        cookieState,
+        queryState: req.query.state,
+        hasCookieHeader: Boolean(req.headers.cookie),
+      });
       return res.status(401).json({ message: "Google authentication failed" });
     }
 
@@ -119,6 +125,7 @@ router.get(
 );
 
 router.get("/google/failure", (req, res) => {
+  console.warn("[oauth] passport authenticate failure", { query: req.query });
   res.status(401).json({ message: "Google authentication failed" });
 });
 
