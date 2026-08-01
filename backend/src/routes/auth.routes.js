@@ -52,17 +52,36 @@ const authLimiter = rateLimit({
   },
 });
 
+// Token-based endpoints (OAuth exchange codes, password reset/change tokens)
+// authenticate via a random single-use secret rather than a guessable
+// credential, and their request bodies carry no email. Keying them with
+// authLimiter's IP+email fallback would collapse all of them into the same
+// "<ip>-no-email" bucket, so unrelated auth actions from one IP would drain
+// each other's allowance. Give them a separate, more lenient, IP-only limiter.
+const createIpOnlyAuthLimiter = () =>
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: process.env.NODE_ENV === "test" ? 10000 : 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: "Too many attempts, please try again later." },
+    keyGenerator: (req) => ipKeyGenerator(req.ip),
+  });
+
+const oauthExchangeLimiter = createIpOnlyAuthLimiter();
+const passwordTokenLimiter = createIpOnlyAuthLimiter();
+
 router.post("/signup", authLimiter, signup);
 router.post("/login", authLimiter, login);
 router.post("/logout", auth, logout);
 router.get("/me", auth, me);
 router.patch("/me", auth, updateMe);
 router.post("/avatar", auth, upload.image.single("avatar"), uploadAvatar);
-router.post("/password/request", auth, authLimiter, requestPasswordChange);
-router.post("/password/confirm", authLimiter, confirmPasswordChange);
+router.post("/password/request", auth, passwordTokenLimiter, requestPasswordChange);
+router.post("/password/confirm", passwordTokenLimiter, confirmPasswordChange);
 router.post("/forgot-password", authLimiter, forgotPassword);
-router.post("/reset-password", authLimiter, resetPassword);
-router.post("/oauth/exchange", authLimiter, exchangeOAuthCode);
+router.post("/reset-password", passwordTokenLimiter, resetPassword);
+router.post("/oauth/exchange", oauthExchangeLimiter, exchangeOAuthCode);
 
 router.get("/google", (req, res, next) => {
   const state = crypto.randomUUID();
@@ -102,5 +121,11 @@ router.get(
 router.get("/google/failure", (req, res) => {
   res.status(401).json({ message: "Google authentication failed" });
 });
+
+// Expose the limiters so tests can assert bucket separation without issuing the
+// thousands of requests needed to hit the relaxed test-mode limits.
+router.authLimiter = authLimiter;
+router.oauthExchangeLimiter = oauthExchangeLimiter;
+router.passwordTokenLimiter = passwordTokenLimiter;
 
 module.exports = router;

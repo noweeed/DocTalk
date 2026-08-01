@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
@@ -8,8 +8,12 @@ export default function OAuthCallback() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { updateUser } = useAuth();
+  const exchangedRef = useRef(false);
 
   useEffect(() => {
+    if (exchangedRef.current) return;
+    exchangedRef.current = true;
+
     const code = searchParams.get("code");
     if (!code) {
       navigate("/login?oauth=error", { replace: true });
@@ -23,7 +27,8 @@ export default function OAuthCallback() {
         updateUser(res.user);
         navigate("/dashboard", { replace: true });
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error("OAuth exchange failed:", err);
         localStorage.removeItem("token");
         navigate("/login?oauth=error", { replace: true });
       });
