@@ -370,21 +370,14 @@ function FinalCta() {
 /* ---------- Footer ---------- */
 
 function Footer() {
+  const currentYear = new Date().getFullYear();
+
   return (
     <footer className="border-t border-border">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
-        <div className="flex items-center gap-2">
-          <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-          <span className="font-serif text-[13px] text-muted-foreground">DocTalk</span>
-        </div>
-        <a
-          href="https://github.com"
-          target="_blank"
-          rel="noreferrer"
-          className="text-[12px] text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded"
-        >
-          GitHub
-        </a>
+      <div className="mx-auto flex max-w-6xl items-center justify-center px-6 py-6">
+        <p className="text-sm text-muted-foreground">
+          © {currentYear} DocTalk — AI-powered document conversations.
+        </p>
       </div>
     </footer>
   );
