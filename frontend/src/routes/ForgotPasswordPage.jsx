@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
+  const [responseMessage, setResponseMessage] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -19,7 +20,10 @@ export default function ForgotPasswordPage() {
     setSubmitting(true);
     setError("");
     try {
-      await api.post("/api/auth/forgot-password", { email });
+      const res = await api.post("/api/auth/forgot-password", { email });
+      setResponseMessage(
+        res?.message || "If an account with that email exists, we've sent a reset link."
+      );
       setSent(true);
     } catch (err) {
       setError(err.message);
@@ -32,7 +36,7 @@ export default function ForgotPasswordPage() {
     return (
       <AuthShell
         title="Check your email"
-        subtitle="If an account with that email exists, we've sent a reset link."
+        subtitle={responseMessage}
         footer={
           <Link to="/login" className="font-medium text-primary hover:underline">
             Back to login
