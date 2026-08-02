@@ -33,9 +33,11 @@ export default function ForgotPasswordPage() {
   };
 
   if (sent) {
+    const isGoogleOnly = responseMessage.includes("Google Sign-In");
+
     return (
       <AuthShell
-        title="Check your email"
+        title={isGoogleOnly ? "Google account detected" : "Check your email"}
         subtitle={responseMessage}
         footer={
           <Link to="/login" className="font-medium text-primary hover:underline">
@@ -43,9 +45,11 @@ export default function ForgotPasswordPage() {
           </Link>
         }
       >
-        <div className="text-sm text-muted-foreground">
-          No email? Check your spam folder, or try again.
-        </div>
+        {!isGoogleOnly && (
+          <div className="text-sm text-muted-foreground">
+            No email? Check your spam folder, or try again.
+          </div>
+        )}
       </AuthShell>
     );
   }
