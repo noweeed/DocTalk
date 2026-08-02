@@ -1,31 +1,46 @@
-const nodemailer = require("nodemailer");
-
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true,
-  family: 4, // force IPv4 — Render (and similar PaaS) don't support outbound IPv6, causing ESOCKET on the default IPv6-preferring DNS resolution
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_APP_PASSWORD,
-  },
-});
-
-const FROM = '"DocTalk" <doctalk.service@gmail.com>';
+const BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";
 
 const logEmailError = (tag, err) => {
   if (process.env.NODE_ENV === "production") {
-    console.error(tag, { name: err && err.name, code: err && err.code });
+    console.error(tag, { name: err && err.name, message: err && err.message });
   } else {
     console.error(tag, err);
   }
 };
 
+async function sendEmail({ toEmail, subject, html }) {
+  const response = await fetch(BREVO_API_URL, {
+    method: "POST",
+    headers: {
+      "api-key": process.env.BREVO_API_KEY,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      sender: {
+        name: process.env.EMAIL_FROM_NAME,
+        email: process.env.EMAIL_FROM_ADDRESS,
+      },
+      to: [{ email: toEmail }],
+      subject,
+      htmlContent: html,
+    }),
+  });
+
+  console.log("[email] Sending via Brevo:", { toEmail, subject, from: process.env.EMAIL_FROM_ADDRESS });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Brevo API error: ${response.status} ${errorText}`);
+  }
+
+  console.log("[email] Brevo send succeeded:", { toEmail, status: response.status });
+}
+
 async function sendPasswordResetEmail(toEmail, resetLink) {
   try {
-    await transporter.sendMail({
-      from: FROM,
-      to: toEmail,
+    await sendEmail({
+      toEmail,
       subject: "Reset your DocTalk password",
       html: `
         <p>You requested a password reset for your DocTalk account.</p>
@@ -34,16 +49,15 @@ async function sendPasswordResetEmail(toEmail, resetLink) {
       `,
     });
   } catch (err) {
-    logEmailError("[email] Nodemailer error (password reset):", err);
+    logEmailError("[email] Brevo error (password reset):", err);
     throw new Error("Failed to send password reset email");
   }
 }
 
 async function sendPasswordChangeConfirmation(toEmail, confirmLink) {
   try {
-    await transporter.sendMail({
-      from: FROM,
-      to: toEmail,
+    await sendEmail({
+      toEmail,
       subject: "Confirm your password change for DocTalk",
       html: `
         <p>You requested to change your DocTalk account password.</p>
@@ -52,7 +66,7 @@ async function sendPasswordChangeConfirmation(toEmail, confirmLink) {
       `,
     });
   } catch (err) {
-    logEmailError("[email] Nodemailer error (password change):", err);
+    logEmailError("[email] Brevo error (password change):", err);
     throw new Error("Failed to send password change confirmation email");
   }
 }

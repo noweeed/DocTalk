@@ -15,6 +15,7 @@ const {
   forgotPassword,
   resetPassword,
   uploadAvatar,
+  deleteAccount,
 } = require("../controllers/auth.controller");
 const auth = require("../middleware/auth.middleware");
 const upload = require("../middleware/upload.middleware");
@@ -77,6 +78,7 @@ router.post("/logout", auth, logout);
 router.get("/me", auth, me);
 router.patch("/me", auth, updateMe);
 router.post("/avatar", auth, upload.image.single("avatar"), uploadAvatar);
+router.delete("/me", auth, deleteAccount);
 router.post("/password/request", auth, passwordTokenLimiter, requestPasswordChange);
 router.post("/password/confirm", passwordTokenLimiter, confirmPasswordChange);
 router.post("/forgot-password", authLimiter, forgotPassword);

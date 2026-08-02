@@ -185,7 +185,7 @@ const updateDocument = async (req, res) => {
     const document = await Document.findOneAndUpdate(
       { _id: req.params.id, userId: req.user.id },
       { $set: updates },
-      { new: true }
+      { returnDocument: "after" }
     );
 
     if (!document) {

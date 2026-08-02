@@ -1,6 +1,9 @@
 const crypto = require("crypto");
 const User = require("../models/User");
 const Document = require("../models/Document");
+const Conversation = require("../models/Conversation");
+const Message = require("../models/Message");
+const Chunk = require("../models/Chunk");
 const TokenBlocklist = require("../models/TokenBlocklist");
 const OAuthExchangeCode = require("../models/OAuthExchangeCode");
 const {
@@ -411,6 +414,56 @@ const resetPassword = async (req, res) => {
   }
 };
 
+const deleteAccount = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const documents = await Document.find({ userId }).select("_id gridfsFileId");
+    const docIds = documents.map((d) => d._id);
+
+    if (documents.some((d) => d.gridfsFileId)) {
+      try {
+        const bucket = getGridFSBucket();
+        await Promise.all(
+          documents
+            .filter((d) => d.gridfsFileId)
+            .map(async (d) => {
+              try {
+                await bucket.delete(d.gridfsFileId);
+              } catch (err) {
+                console.error("[deleteAccount] GridFS cleanup failed:", err.message);
+              }
+            })
+        );
+      } catch (gridfsErr) {
+        console.error("[deleteAccount] GridFS access failed:", gridfsErr.message);
+      }
+    }
+
+    await Chunk.deleteMany({ documentId: { $in: docIds } });
+    await Document.deleteMany({ userId });
+
+    const conversations = await Conversation.find({ userId }).select("_id");
+    const convIds = conversations.map((c) => c._id);
+    await Message.deleteMany({ conversationId: { $in: convIds } });
+    await Conversation.deleteMany({ userId });
+
+    await OAuthExchangeCode.deleteMany({ userId });
+
+    await TokenBlocklist.create({
+      jti: req.user.jti,
+      expiresAt: new Date(req.user.exp * 1000),
+    });
+
+    await User.deleteOne({ _id: userId });
+
+    res.json({ message: "Account deleted" });
+  } catch (error) {
+    console.error("[auth.controller]", error);
+    res.status(500).json({ message: "Something went wrong" });
+  }
+};
+
 const uploadAvatar = async (req, res) => {
   try {
     if (!req.file) {
@@ -426,7 +479,7 @@ const uploadAvatar = async (req, res) => {
     const user = await User.findByIdAndUpdate(
       req.user.id,
       { avatarUrl: avatarBase64 },
-      { new: true }
+      { returnDocument: "after" }
     ).select("-passwordHash");
 
     if (!user) {
@@ -453,4 +506,5 @@ module.exports = {
   forgotPassword,
   resetPassword,
   uploadAvatar,
+  deleteAccount,
 };
