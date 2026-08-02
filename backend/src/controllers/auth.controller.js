@@ -11,7 +11,10 @@ const {
   comparePassword,
   generateToken,
 } = require("../services/auth.service");
-const { sendPasswordResetEmail, sendPasswordChangeConfirmation } = require("../services/email.service");
+const {
+  sendPasswordResetEmail,
+  sendPasswordChangeConfirmation,
+} = require("../services/email.service");
 const { isImageBuffer } = require("../services/fileValidation");
 const getGridFSBucket = require("../config/gridfs");
 
@@ -191,8 +194,12 @@ const me = async (req, res) => {
       isTrashed: false,
     });
 
-    const userDocs = await Document.find({ userId: req.user.id }).select("gridfsFileId");
-    const fileIds = userDocs.filter((d) => d.gridfsFileId).map((d) => d.gridfsFileId);
+    const userDocs = await Document.find({ userId: req.user.id }).select(
+      "gridfsFileId",
+    );
+    const fileIds = userDocs
+      .filter((d) => d.gridfsFileId)
+      .map((d) => d.gridfsFileId);
     let storageUsedBytes = 0;
     if (fileIds.length > 0) {
       try {
@@ -235,15 +242,21 @@ const updateMe = async (req, res) => {
 
     if (name !== undefined) {
       if (name.trim().length < 2) {
-        return res.status(400).json({ message: "Name must be at least 2 characters" });
+        return res
+          .status(400)
+          .json({ message: "Name must be at least 2 characters" });
       }
       user.name = name.trim();
     }
 
     await user.save();
 
-    const userDocs = await Document.find({ userId: req.user.id }).select("gridfsFileId");
-    const fileIds = userDocs.filter((d) => d.gridfsFileId).map((d) => d.gridfsFileId);
+    const userDocs = await Document.find({ userId: req.user.id }).select(
+      "gridfsFileId",
+    );
+    const fileIds = userDocs
+      .filter((d) => d.gridfsFileId)
+      .map((d) => d.gridfsFileId);
     let storageUsedBytes = 0;
     if (fileIds.length > 0) {
       try {
@@ -263,7 +276,10 @@ const updateMe = async (req, res) => {
       planStatus: user.planStatus,
       stripeSubscriptionEndsAt: user.stripeSubscriptionEndsAt,
       avatarUrl: user.avatarUrl,
-      documentsCount: await Document.countDocuments({ userId: req.user.id, isTrashed: false }),
+      documentsCount: await Document.countDocuments({
+        userId: req.user.id,
+        isTrashed: false,
+      }),
       storageUsedBytes,
       questionsUsedThisMonth: user.questionsUsedThisMonth,
       usageResetAt: user.usageResetAt,
@@ -282,7 +298,11 @@ const requestPasswordChange = async (req, res) => {
     }
 
     if (!user.passwordHash) {
-      return res.status(400).json({ message: "Cannot change password for Google-authenticated accounts" });
+      return res
+        .status(400)
+        .json({
+          message: "Cannot change password for Google-authenticated accounts",
+        });
     }
 
     const token = crypto.randomBytes(32).toString("hex");
@@ -296,7 +316,10 @@ const requestPasswordChange = async (req, res) => {
     user.passwordChangeTokenExpiry = expiry;
     await user.save();
 
-    res.json({ message: "Check your email for a link to continue changing your password." });
+    res.json({
+      message:
+        "Check your email for a link to continue changing your password.",
+    });
   } catch (error) {
     console.error("[auth.controller]", error);
     res.status(500).json({ message: "Something went wrong" });
@@ -312,7 +335,9 @@ const confirmPasswordChange = async (req, res) => {
     }
 
     if (!token || !newPassword) {
-      return res.status(400).json({ message: "Token and new password are required" });
+      return res
+        .status(400)
+        .json({ message: "Token and new password are required" });
     }
 
     const user = await User.findOne({
@@ -359,11 +384,14 @@ const forgotPassword = async (req, res) => {
     if (user && !user.passwordHash && user.googleId) {
       return res.json({
         message:
-          "This account uses Google Sign-In. Log in with the 'Continue with Google' button — there's no password to reset.",
+          "This account uses Google Sign-In.\nLog in with the 'Continue with Google' button.",
+        isGoogleOnly: true,
       });
     }
     if (!user || !user.passwordHash) {
-      return res.json({ message: "If the email exists, a reset link has been sent" });
+      return res.json({
+        message: "If the email exists, a reset link has been sent",
+      });
     }
 
     const token = crypto.randomBytes(32).toString("hex");
@@ -393,7 +421,9 @@ const resetPassword = async (req, res) => {
     }
 
     if (!token || !newPassword) {
-      return res.status(400).json({ message: "Token and new password are required" });
+      return res
+        .status(400)
+        .json({ message: "Token and new password are required" });
     }
 
     const user = await User.findOne({
@@ -402,7 +432,9 @@ const resetPassword = async (req, res) => {
     });
 
     if (!user) {
-      return res.status(400).json({ message: "Invalid or expired reset token" });
+      return res
+        .status(400)
+        .json({ message: "Invalid or expired reset token" });
     }
 
     if (!PASSWORD_REGEX.test(newPassword)) {
@@ -428,7 +460,9 @@ const deleteAccount = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const documents = await Document.find({ userId }).select("_id gridfsFileId");
+    const documents = await Document.find({ userId }).select(
+      "_id gridfsFileId",
+    );
     const docIds = documents.map((d) => d._id);
 
     if (documents.some((d) => d.gridfsFileId)) {
@@ -441,12 +475,18 @@ const deleteAccount = async (req, res) => {
               try {
                 await bucket.delete(d.gridfsFileId);
               } catch (err) {
-                console.error("[deleteAccount] GridFS cleanup failed:", err.message);
+                console.error(
+                  "[deleteAccount] GridFS cleanup failed:",
+                  err.message,
+                );
               }
-            })
+            }),
         );
       } catch (gridfsErr) {
-        console.error("[deleteAccount] GridFS access failed:", gridfsErr.message);
+        console.error(
+          "[deleteAccount] GridFS access failed:",
+          gridfsErr.message,
+        );
       }
     }
 
@@ -489,7 +529,7 @@ const uploadAvatar = async (req, res) => {
     const user = await User.findByIdAndUpdate(
       req.user.id,
       { avatarUrl: avatarBase64 },
-      { returnDocument: "after" }
+      { returnDocument: "after" },
     ).select("-passwordHash");
 
     if (!user) {

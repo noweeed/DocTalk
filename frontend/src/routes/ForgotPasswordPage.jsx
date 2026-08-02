@@ -7,6 +7,7 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [responseMessage, setResponseMessage] = useState("");
+  const [isGoogleOnly, setIsGoogleOnly] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -24,6 +25,7 @@ export default function ForgotPasswordPage() {
       setResponseMessage(
         res?.message || "If an account with that email exists, we've sent a reset link."
       );
+      setIsGoogleOnly(!!res?.isGoogleOnly);
       setSent(true);
     } catch (err) {
       setError(err.message);
@@ -33,12 +35,20 @@ export default function ForgotPasswordPage() {
   };
 
   if (sent) {
-    const isGoogleOnly = responseMessage.includes("Google Sign-In");
-
     return (
       <AuthShell
         title={isGoogleOnly ? "Google account detected" : "Check your email"}
-        subtitle={responseMessage}
+        subtitle={
+          isGoogleOnly ? (
+            <>
+              This account uses Google Sign-In.
+              <br />
+              Log in with the "Continue with Google" button.
+            </>
+          ) : (
+            responseMessage
+          )
+        }
         footer={
           <Link to="/login" className="font-medium text-primary hover:underline">
             Back to login
