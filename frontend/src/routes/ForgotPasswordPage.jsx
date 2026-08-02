@@ -39,7 +39,7 @@ export default function ForgotPasswordPage() {
           </Link>
         }
       >
-        <div className="text-center text-sm text-muted-foreground">
+        <div className="text-sm text-muted-foreground">
           No email? Check your spam folder, or try again.
         </div>
       </AuthShell>
