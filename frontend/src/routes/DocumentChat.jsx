@@ -32,6 +32,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import ReactMarkdown from "react-markdown";
 import { Input } from "@/components/ui/input";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -585,8 +586,27 @@ function ChatPanel({ messages, streaming, input, setInput, ask, jumpToPage, chat
                     <Sparkles className="h-3.5 w-3.5" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                      {m.text}
+                    <div className="text-sm leading-relaxed text-foreground">
+                      <ReactMarkdown
+                        components={{
+                          p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                          strong: ({ children }) => (
+                            <strong className="font-semibold">{children}</strong>
+                          ),
+                          ul: ({ children }) => (
+                            <ul className="mb-2 list-disc pl-5">{children}</ul>
+                          ),
+                          ol: ({ children }) => (
+                            <ol className="mb-2 list-decimal pl-5">{children}</ol>
+                          ),
+                          li: ({ children }) => <li className="mb-1">{children}</li>,
+                          code: ({ children }) => (
+                            <code className="rounded bg-muted px-1 py-0.5 text-sm">{children}</code>
+                          ),
+                        }}
+                      >
+                        {m.text}
+                      </ReactMarkdown>
                       {m.streaming && (
                         <span className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 animate-pulse bg-primary" />
                       )}
