@@ -347,11 +347,21 @@ const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
 
+    if (typeof email !== "string") {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+
     if (!email) {
       return res.status(400).json({ message: "Email is required" });
     }
 
     const user = await User.findOne({ email: email.toLowerCase() });
+    if (user && !user.passwordHash && user.googleId) {
+      return res.json({
+        message:
+          "This account uses Google Sign-In. Log in with the 'Continue with Google' button — there's no password to reset.",
+      });
+    }
     if (!user || !user.passwordHash) {
       return res.json({ message: "If the email exists, a reset link has been sent" });
     }

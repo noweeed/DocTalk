@@ -6,10 +6,14 @@ Rules:
 - If the context does not contain enough information to answer, say "I don't have enough information in this document to answer that question." Do not guess or use outside knowledge.
 - Reference page numbers naturally when relevant (e.g., "According to page 3...").
 - Be concise and direct.
-- If the user's message is a greeting or small talk (e.g. "hello", "hi", "thanks", "ok") rather than a real question about the document, respond warmly and briefly and invite them to ask something about the document. Do NOT say you don't have relevant information in this case — that response is for genuine questions the provided context doesn't answer.`;
+- If the user's message is a greeting or small talk (e.g. "hello", "hi", "thanks", "ok") rather than a real question about the document, respond warmly and briefly and invite them to ask something about the document. Do NOT say you don't have relevant information in this case — that response is for genuine questions the provided context doesn't answer.
+- You only answer questions using the provided context. You cannot edit, generate, rewrite, or output a modified version of the document, even if asked.`;
 
 const NO_CONTEXT_ANSWER =
   "I don't have relevant information in this document to answer that.";
+
+const OUT_OF_SCOPE_ANSWER =
+  "DocTalk can only answer questions about this PDF's content. It can't edit, generate, or modify documents.";
 
 const SUMMARIZATION_SYSTEM_PROMPT = `You are a helpful assistant that summarizes documents. Summarize the following document according to the user's requested format. Base the summary only on the provided text — do not invent content not present in it. If the document consists entirely of non-substantive filler text (e.g. placeholder/lorem ipsum), state that clearly rather than fabricating real content.`;
 
@@ -112,9 +116,10 @@ const streamSmallTalk = async function* (question) {
   }
 };
 
-const CLASSIFY_SYSTEM_PROMPT = `You decide whether a user message is small talk or a real question about a document.
+const CLASSIFY_SYSTEM_PROMPT = `You decide whether a user message is small talk, a real question about a document, or an out-of-scope request.
 Reply with exactly one word: "QUESTION" if the message asks for information or refers to the content of a document.
-Reply with "SMALL_TALK" if it is a greeting, thanks, praise, acknowledgement, or casual chat with no request for information.`;
+Reply with "SMALL_TALK" if it is a greeting, thanks, praise, acknowledgement, or casual chat with no request for information.
+Reply with "OUT_OF_SCOPE" if it asks to edit, modify, rewrite, translate, generate a new document/file, or otherwise produce altered content rather than answer a question about the existing content.`;
 
 const classifyMessage = async (question) => {
   const response = await groq.chat.completions.create({
@@ -128,7 +133,9 @@ const classifyMessage = async (question) => {
   });
 
   const label = (response.choices[0]?.message?.content || "").trim().toUpperCase();
-  return label.includes("SMALL_TALK") ? "SMALL_TALK" : "QUESTION";
+  if (label.includes("SMALL_TALK")) return "SMALL_TALK";
+  if (label.includes("OUT_OF_SCOPE")) return "OUT_OF_SCOPE";
+  return "QUESTION";
 };
 
 module.exports = {
@@ -138,4 +145,5 @@ module.exports = {
   streamSummarization,
   streamSmallTalk,
   NO_CONTEXT_ANSWER,
+  OUT_OF_SCOPE_ANSWER,
 };

@@ -11,6 +11,7 @@ const {
   streamSummarization,
   streamSmallTalk,
   NO_CONTEXT_ANSWER,
+  OUT_OF_SCOPE_ANSWER,
 } = require("../services/llm.service");
 
 const SUMMARIZATION_MAX_CHARS = 12000;
@@ -239,6 +240,12 @@ const sendMessage = async (req, res) => {
         res.write(`data: ${JSON.stringify({ error: "Something went wrong" })}\n\n`);
         if (!fullAnswer) fullAnswer = "An error occurred while generating the answer.";
       }
+    } else if (intent === "OUT_OF_SCOPE") {
+      // ── OUT OF SCOPE PATH ─────────────────────────────────
+      // No retrieval, no citations. Return the fixed canned response without
+      // calling Groq, mirroring the NO_CONTEXT_ANSWER handling.
+      res.write(`data: ${JSON.stringify({ content: OUT_OF_SCOPE_ANSWER })}\n\n`);
+      fullAnswer = OUT_OF_SCOPE_ANSWER;
     } else {
       // ── NORMAL RETRIEVAL PATH ─────────────────────────────
       const questionEmbedding = await embedText(question);
