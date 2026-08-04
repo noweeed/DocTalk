@@ -357,17 +357,25 @@ export default function DocumentChat() {
   if (status === "processing") {
     return (
       <div className="flex h-screen items-center justify-center bg-background px-4">
-        <div className="w-full max-w-md space-y-4 rounded-xl border border-border bg-card p-8 text-center">
-          <div className="mx-auto flex items-center justify-center gap-2">
-            <Skeleton className="h-4 w-4 rounded-sm" />
-            <Skeleton className="h-6 w-24" />
+        <div className="w-full max-w-md rounded-xl border border-border bg-card p-8">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+              <FileText className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-medium text-foreground">
+                {doc?.title || "Processing your document..."}
+              </div>
+              <div className="mt-0.5 text-xs text-muted-foreground">
+                Processing document — this should take just a moment.
+              </div>
+            </div>
           </div>
-          <h3 className="text-lg font-medium text-foreground">Processing your document...</h3>
-          <p className="text-sm text-muted-foreground">This should take just a moment.</p>
-          <div className="space-y-2">
-            <Skeleton className="h-3.5 w-full" />
-            <Skeleton className="h-3.5 w-4/5" />
-            <Skeleton className="h-3.5 w-3/5" />
+          <div className="mt-5 h-2 w-full overflow-hidden rounded-full bg-secondary" role="progressbar" aria-valuenow={100} aria-valuemin={0} aria-valuemax={100}>
+            <div
+              className="h-full w-full rounded-full gradient-primary animate-pulse"
+              style={{ width: "100%" }}
+            />
           </div>
         </div>
       </div>
