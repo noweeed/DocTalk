@@ -26,7 +26,7 @@ export default function OAuthCallback() {
       .post("/api/auth/oauth/exchange", { code })
       .then((res) => {
         localStorage.setItem("token", res.token);
-        setUser(res.user);
+        await refreshUser()
         navigate("/dashboard", { replace: true });
       })
       .catch((err) => {
