@@ -1,4 +1,5 @@
 const Document = require("../models/Document");
+const User = require("../models/User");
 const Chunk = require("../models/Chunk");
 const { extractPageTexts, chunkPages } = require("../services/chunking.service");
 const { embedChunksForDocument } = require("../services/embedding.service");
@@ -52,6 +53,7 @@ const uploadDocument = async (req, res) => {
     });
 
     document.gridfsFileId = uploadStream.id;
+    document.fileSizeBytes = req.file.buffer.length;
 
     const { numpages, pageTexts } = await extractPageTexts(req.file.buffer);
     const allChunks = chunkPages(pageTexts).map((chunk) => ({
@@ -65,6 +67,10 @@ const uploadDocument = async (req, res) => {
 
     document.pageCount = numpages;
     await document.save();
+
+    await User.findByIdAndUpdate(req.user.id, {
+      $inc: { storageUsedBytes: req.file.buffer.length },
+    });
 
     await embedChunksForDocument(document._id);
 
@@ -264,6 +270,10 @@ const permanentDeleteDocument = async (req, res) => {
         console.error("GridFS cleanup failed:", err.message);
       }
     }
+
+    await User.findByIdAndUpdate(req.user.id, {
+      $inc: { storageUsedBytes: -(document.fileSizeBytes || 0) },
+    });
 
     await Document.deleteOne({ _id: document._id });
 

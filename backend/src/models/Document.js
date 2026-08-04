@@ -39,6 +39,7 @@ const documentSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       default: null,
     },
+    fileSizeBytes: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

@@ -12,6 +12,7 @@ const userSchema = new mongoose.Schema(
     plan: { type: String, enum: ["free", "pro"], default: "free" },
     planStatus: { type: String, default: "active" },
     questionsUsedThisMonth: { type: Number, default: 0 },
+    storageUsedBytes: { type: Number, default: 0 },
     usageResetAt: { type: Date, default: () => new Date() },
     avatarUrl: { type: String, default: null },
     resetPasswordToken: { type: String, default: null },

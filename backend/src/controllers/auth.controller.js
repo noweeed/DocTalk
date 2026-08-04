@@ -194,23 +194,6 @@ const me = async (req, res) => {
       isTrashed: false,
     });
 
-    const userDocs = await Document.find({ userId: req.user.id }).select(
-      "gridfsFileId",
-    );
-    const fileIds = userDocs
-      .filter((d) => d.gridfsFileId)
-      .map((d) => d.gridfsFileId);
-    let storageUsedBytes = 0;
-    if (fileIds.length > 0) {
-      try {
-        const bucket = getGridFSBucket();
-        const files = await bucket.find({ _id: { $in: fileIds } }).toArray();
-        storageUsedBytes = files.reduce((sum, f) => sum + (f.length || 0), 0);
-      } catch (gridfsErr) {
-        console.error("[me] GridFS query failed:", gridfsErr.message);
-      }
-    }
-
     res.json({
       id: user._id,
       name: user.name,
@@ -220,7 +203,7 @@ const me = async (req, res) => {
       stripeSubscriptionEndsAt: user.stripeSubscriptionEndsAt,
       avatarUrl: user.avatarUrl,
       documentsCount: docCount,
-      storageUsedBytes,
+      storageUsedBytes: user.storageUsedBytes,
       questionsUsedThisMonth: user.questionsUsedThisMonth,
       usageResetAt: user.usageResetAt,
       createdAt: user.createdAt,
