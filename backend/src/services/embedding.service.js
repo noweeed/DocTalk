@@ -1,16 +1,48 @@
-const genAI = require("../config/gemini");
+const { getNextGenAI } = require("../config/gemini");
 const Chunk = require("../models/Chunk");
 
-const BATCH_SIZE = 8;
-const BATCH_DELAY_MS = 1000;
+const BATCH_SIZE = 4;
+const BATCH_DELAY_MS = 4000;
+const MAX_RETRIES = 3;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const getRetryDelayMs = (err) => {
+  const detail = err?.errorDetails?.find((d) => d.retryDelay);
+  if (detail?.retryDelay) {
+    const seconds = parseFloat(detail.retryDelay);
+    if (!Number.isNaN(seconds)) return Math.ceil(seconds * 1000) + 500; // small buffer
+  }
+  return 5000;
+};
 
 const embedText = async (text) => {
+  const genAI = getNextGenAI();
   const model = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
   const result = await model.embedContent({
     content: { parts: [{ text }] },
     outputDimensionality: 768,
   });
   return result.embedding.values;
+};
+
+const embedTextWithRetry = async (text, retries = MAX_RETRIES) => {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await embedText(text);
+    } catch (err) {
+      const isLastAttempt = attempt === retries - 1;
+      if (err.status === 429 && !isLastAttempt) {
+        const delayMs = getRetryDelayMs(err);
+        console.warn(
+          `Embedding rate-limited (attempt ${attempt + 1}/${retries}), retrying in ${delayMs}ms`,
+        );
+        await sleep(delayMs);
+      } else {
+        throw err;
+      }
+    }
+  }
 };
 
 const embedChunksForDocument = async (documentId) => {
@@ -25,10 +57,10 @@ const embedChunksForDocument = async (documentId) => {
 
     const results = await Promise.allSettled(
       batch.map(async (chunk) => {
-        const embedding = await embedText(chunk.content);
+        const embedding = await embedTextWithRetry(chunk.content);
         await Chunk.updateOne({ _id: chunk._id }, { $set: { embedding } });
         return chunk._id;
-      })
+      }),
     );
 
     results.forEach((r) => {
@@ -38,7 +70,7 @@ const embedChunksForDocument = async (documentId) => {
     embedded += results.filter((r) => r.status === "fulfilled").length;
 
     if (i + BATCH_SIZE < chunks.length) {
-      await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY_MS));
+      await sleep(BATCH_DELAY_MS);
     }
   }
 
