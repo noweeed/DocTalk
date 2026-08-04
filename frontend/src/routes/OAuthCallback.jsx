@@ -2,12 +2,12 @@ import { useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Loader2 } from "lucide-react";
 
 export default function OAuthCallback() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { setUser, refreshUser } = useAuth();
+  const { refreshUser } = useAuth();
 
   useEffect(() => {
     const code = searchParams.get("code");
@@ -18,7 +18,7 @@ export default function OAuthCallback() {
 
     const exchangeKey = `oauth_exchanged_${code}`;
     if (sessionStorage.getItem(exchangeKey)) {
-      return; // already handled (or in flight) for this exact code
+      return;
     }
     sessionStorage.setItem(exchangeKey, "1");
 
@@ -26,7 +26,6 @@ export default function OAuthCallback() {
       .post("/api/auth/oauth/exchange", { code })
       .then(async (res) => {
         localStorage.setItem("token", res.token);
-        setUser(res.user);
         await refreshUser();
         navigate("/dashboard", { replace: true });
       })
@@ -36,21 +35,11 @@ export default function OAuthCallback() {
         localStorage.removeItem("token");
         navigate("/login?oauth=error", { replace: true });
       });
-  }, [searchParams, navigate, setUser, refreshUser]);
+  }, [searchParams, navigate, refreshUser]);
 
   return (
-    <div className="flex h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm space-y-4 rounded-xl border border-border bg-card p-6">
-        <div className="flex items-center justify-center gap-2">
-          <Skeleton className="h-4 w-4 rounded-sm" />
-          <Skeleton className="h-5 w-20" />
-        </div>
-        <div className="space-y-3">
-          <Skeleton className="h-4 w-3/4" />
-          <Skeleton className="h-4 w-1/2" />
-        </div>
-        <Skeleton className="h-10 w-full rounded-md" />
-      </div>
+    <div className="flex h-screen items-center justify-center bg-background">
+      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
     </div>
   );
 }
