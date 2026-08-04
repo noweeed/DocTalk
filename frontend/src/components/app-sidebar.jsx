@@ -6,7 +6,6 @@ import {
   Star,
   Trash2,
   Settings,
-  FileText,
   Menu,
   X,
 } from "lucide-react";
@@ -59,8 +58,8 @@ function SidebarInner({ onNavigate }) {
         onClick={onNavigate}
         className="flex items-center gap-2.5 px-6 pt-6 pb-8"
       >
-        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg gradient-primary shadow-glow">
-          <FileText className="h-4 w-4 text-primary-foreground" strokeWidth={2.5} />
+        <div className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-lg">
+          <img src="/favicon.svg" alt="DocTalk" className="h-8 w-8" />
         </div>
         <span className="text-base font-semibold tracking-tight text-foreground">DocTalk</span>
       </Link>

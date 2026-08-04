@@ -41,7 +41,7 @@ export function AuthProvider({ children }) {
     const res = await api.post("/api/auth/login", { email, password });
     localStorage.setItem("token", res.token);
     setUser(res.user);
-    refreshUser();
+    await refreshUser();
     navigate("/dashboard");
   };
 
@@ -49,7 +49,7 @@ export function AuthProvider({ children }) {
     const res = await api.post("/api/auth/signup", { name, email, password });
     localStorage.setItem("token", res.token);
     setUser(res.user);
-    refreshUser();
+    await refreshUser();
     navigate("/dashboard");
   };
 
@@ -65,7 +65,9 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout, setUser, updateUser, refreshUser }}>
+    <AuthContext.Provider
+      value={{ user, loading, login, signup, logout, setUser, updateUser, refreshUser }}
+    >
       {children}
     </AuthContext.Provider>
   );

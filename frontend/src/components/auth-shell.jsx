@@ -9,7 +9,7 @@ export const AuthShell = ({
   <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
     <div className="w-full max-w-sm">
       <Link to="/" className="mb-8 flex items-center justify-center gap-2">
-        <div className="h-2 w-2 rounded-sm bg-primary" />
+        <img src="/favicon.svg" alt="DocTalk" className="h-6 w-6 rounded-md" />
         <span className="font-display text-base font-semibold tracking-tight text-foreground">
           DocTalk
         </span>
