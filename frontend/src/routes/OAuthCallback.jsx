@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function OAuthCallback() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { setUser } = useAuth();
+  const { setUser, refreshUser } = useAuth();
 
   useEffect(() => {
     const code = searchParams.get("code");
@@ -24,9 +24,10 @@ export default function OAuthCallback() {
 
     api
       .post("/api/auth/oauth/exchange", { code })
-      .then((res) => {
+      .then(async (res) => {
         localStorage.setItem("token", res.token);
-        await refreshUser()
+        setUser(res.user);
+        await refreshUser();
         navigate("/dashboard", { replace: true });
       })
       .catch((err) => {
@@ -35,7 +36,7 @@ export default function OAuthCallback() {
         localStorage.removeItem("token");
         navigate("/login?oauth=error", { replace: true });
       });
-  }, [searchParams, navigate, setUser]);
+  }, [searchParams, navigate, setUser, refreshUser]);
 
   return (
     <div className="flex h-screen items-center justify-center bg-background px-4">
