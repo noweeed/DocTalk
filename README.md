@@ -48,14 +48,7 @@ npm install
 cp .env.example .env   # fill in the values below
 ```
 
-```
-PORT MONGODB_URI JWT_SECRET GEMINI_API_KEY GROQ_API_KEY
-BACKEND_URL FRONTEND_URL GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET
-BREVO_API_KEY EMAIL_FROM_ADDRESS EMAIL_FROM_NAME
-STRIPE_SECRET_KEY STRIPE_PRICE_ID STRIPE_WEBHOOK_SECRET
-```
-
-> 🔑 **Gemini load balancing:** embedding calls round-robin across multiple keys to multiply the free-tier 100 req/min quota. Set `GEMINI_API_KEY` plus optional `GEMINI_API_KEY1`, `GEMINI_API_KEY2`, `GEMINI_API_KEY3` (no underscore before the number). Any unset keys are skipped automatically.
+> 🔑 **Gemini load balancing:** embedding calls round-robin across multiple keys to multiply the free-tier 100 req/min quota. Set `GEMINI_API_KEY1` plus optional`GEMINI_API_KEY2`, `GEMINI_API_KEY3` (no underscore before the number). Any unset keys are skipped automatically.
 
 ```bash
 npm run dev                    # backend

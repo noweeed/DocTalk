@@ -1,5 +1,5 @@
 import { TopBar } from "@/components/top-bar";
-import { DocCard } from "@/components/doc-card";
+import { DocCard, DocCardSkeleton } from "@/components/doc-card";
 import { documentsApi } from "@/lib/documents";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -7,6 +7,7 @@ import { Search, LayoutGrid, List, FileText, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function RecentPage() {
   const [q, setQ] = useState("");
@@ -76,11 +77,37 @@ export default function RecentPage() {
         </div>
 
         {isLoading ? (
-          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {[1, 2, 3, 4].map((n) => (
-              <div key={n} className="h-40 animate-pulse rounded-xl border border-border bg-card" />
-            ))}
-          </div>
+          view === "grid" ? (
+            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                <DocCardSkeleton key={n} />
+              ))}
+            </div>
+          ) : (
+            <div className="mt-6 overflow-hidden rounded-xl border border-border bg-card">
+              <div className="grid grid-cols-[1fr_120px_100px_60px] gap-4 border-b border-border px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                <div>Name</div>
+                <div className="hidden sm:block">Last opened</div>
+                <div className="hidden sm:block">Pages</div>
+                <div />
+              </div>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <div key={n} className="grid grid-cols-[1fr_120px_100px_60px] items-center gap-4 border-b border-border px-4 py-3 last:border-b-0">
+                  <div className="space-y-2">
+                    <Skeleton className="h-3.5 w-2/3" />
+                    <Skeleton className="h-3 w-1/3" />
+                  </div>
+                  <div className="hidden sm:block">
+                    <Skeleton className="h-3 w-20" />
+                  </div>
+                  <div className="hidden sm:block">
+                    <Skeleton className="h-3 w-10" />
+                  </div>
+                  <div />
+                </div>
+              ))}
+            </div>
+          )
         ) : filteredDocs.length === 0 && nonTrashedDocs.length > 0 ? (
           <div className="mt-16 rounded-2xl border border-dashed border-border p-16 text-center text-sm text-muted-foreground">
             No documents match your search.

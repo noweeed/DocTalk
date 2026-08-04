@@ -1,5 +1,5 @@
 import { TopBar } from "@/components/top-bar";
-import { DocCard } from "@/components/doc-card";
+import { DocCard, DocCardSkeleton } from "@/components/doc-card";
 import { documentsApi } from "@/lib/documents";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -41,7 +41,7 @@ export default function StarredPage() {
         {isLoading ? (
           <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {[1, 2, 3].map((n) => (
-              <div key={n} className="h-40 animate-pulse rounded-xl border border-border bg-card" />
+              <DocCardSkeleton key={n} />
             ))}
           </div>
         ) : starredDocs.length === 0 ? (

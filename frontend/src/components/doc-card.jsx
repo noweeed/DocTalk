@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { FileText, Star, Trash2, RotateCcw, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 function timeAgo(dateStr) {
   if (!dateStr) return "Never";
@@ -135,6 +136,23 @@ export function DocCard({ doc, variant = "default", selected, onToggleSelect, on
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+export function DocCardSkeleton({ variant = "default" }) {
+  const trashed = variant === "trashed";
+  return (
+    <div className="flex h-40 flex-col rounded-xl border border-border bg-card p-4">
+      <div className="flex items-start justify-between">
+        <Skeleton className="h-10 w-10 rounded-lg" />
+        <Skeleton className="h-4 w-4 rounded" />
+      </div>
+      <div className={cn("flex min-w-0 flex-1 flex-col justify-center gap-2", trashed && "opacity-60")}>
+        <Skeleton className="h-3.5 w-4/5" />
+        <Skeleton className="h-3.5 w-3/5" />
+      </div>
+      <Skeleton className="h-3 w-2/5" />
     </div>
   );
 }

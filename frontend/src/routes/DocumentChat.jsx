@@ -13,8 +13,8 @@ import {
   PanelRightOpen,
   Sparkles,
   FileText,
-  Loader2,
 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -306,19 +306,69 @@ export default function DocumentChat() {
 
   if (status === "loading") {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex h-screen flex-col bg-background">
+        <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
+          <Skeleton className="h-9 w-9 rounded-md" />
+          <Skeleton className="h-4 w-1/3" />
+          <div className="ml-auto flex items-center gap-2">
+            <Skeleton className="h-9 w-9 rounded-md" />
+            <Skeleton className="h-9 w-9 rounded-md" />
+          </div>
+        </div>
+        <div className="flex min-h-0 flex-1">
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div className="flex items-center gap-3 border-b border-border px-4 py-2">
+              <Skeleton className="h-7 w-7 rounded" />
+              <Skeleton className="h-3.5 w-20" />
+              <Skeleton className="h-7 w-7 rounded" />
+              <div className="mx-2 h-4 w-px bg-border" />
+              <Skeleton className="h-7 w-7 rounded" />
+              <Skeleton className="h-3.5 w-10" />
+              <Skeleton className="h-7 w-7 rounded" />
+            </div>
+            <div className="flex-1 bg-muted/30 p-4">
+              <Skeleton className="h-full w-full rounded-lg" />
+            </div>
+          </div>
+          <div className="hidden w-[400px] shrink-0 flex-col border-l border-border bg-surface p-4 md:flex">
+            <Skeleton className="h-8 w-48 rounded-full" />
+            <div className="mt-6 space-y-4">
+              <div className="flex justify-end">
+                <Skeleton className="h-10 w-2/3 rounded-2xl rounded-br-sm" />
+              </div>
+              <div className="flex gap-2.5">
+                <Skeleton className="h-7 w-7 shrink-0 rounded-full" />
+                <Skeleton className="h-16 w-3/4" />
+              </div>
+              <div className="flex gap-2.5">
+                <Skeleton className="h-7 w-7 shrink-0 rounded-full" />
+                <Skeleton className="h-20 w-4/5" />
+              </div>
+            </div>
+            <div className="mt-auto space-y-3">
+              <Skeleton className="h-12 w-full rounded-xl" />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (status === "processing") {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <div className="text-center">
-          <Loader2 className="mx-auto h-10 w-10 animate-spin text-primary" />
-          <h3 className="mt-4 text-lg font-medium text-foreground">Processing your document...</h3>
-          <p className="mt-1 text-sm text-muted-foreground">This should take just a moment.</p>
+      <div className="flex h-screen items-center justify-center bg-background px-4">
+        <div className="w-full max-w-md space-y-4 rounded-xl border border-border bg-card p-8 text-center">
+          <div className="mx-auto flex items-center justify-center gap-2">
+            <Skeleton className="h-4 w-4 rounded-sm" />
+            <Skeleton className="h-6 w-24" />
+          </div>
+          <h3 className="text-lg font-medium text-foreground">Processing your document...</h3>
+          <p className="text-sm text-muted-foreground">This should take just a moment.</p>
+          <div className="space-y-2">
+            <Skeleton className="h-3.5 w-full" />
+            <Skeleton className="h-3.5 w-4/5" />
+            <Skeleton className="h-3.5 w-3/5" />
+          </div>
         </div>
       </div>
     );

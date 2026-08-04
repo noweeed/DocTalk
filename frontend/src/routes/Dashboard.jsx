@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { TopBar } from "@/components/top-bar";
-import { DocCard } from "@/components/doc-card";
+import { DocCard, DocCardSkeleton } from "@/components/doc-card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { documentsApi } from "@/lib/documents";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
@@ -8,15 +9,19 @@ import { formatBytes } from "@/lib/utils";
 import { toast } from "sonner";
 import { Upload, FileText, HardDrive, MessageSquare, Plus } from "lucide-react";
 
-function StatCard({ icon: Icon, label, value }) {
+function StatCard({ icon: Icon, label, value, loading }) {
   return (
     <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-4">
-      <div className="grid h-10 w-10 place-items-center rounded-lg bg-accent text-primary">
-        <Icon className="h-4 w-4" strokeWidth={2} />
+      <div className="grid h-10 w-10 place-items-center rounded-lg bg-accent">
+        {loading ? <Skeleton className="h-10 w-10 rounded-lg" /> : <Icon className="h-4 w-4 text-primary" strokeWidth={2} />}
       </div>
       <div className="min-w-0">
         <div className="text-xs text-muted-foreground">{label}</div>
-        <div className="mt-0.5 text-lg font-semibold tracking-tight text-foreground">{value}</div>
+        {loading ? (
+          <Skeleton className="mt-1.5 h-6 w-16" />
+        ) : (
+          <div className="mt-0.5 text-lg font-semibold tracking-tight text-foreground">{value}</div>
+        )}
       </div>
     </div>
   );
@@ -72,9 +77,9 @@ export default function Dashboard() {
         </div>
 
         <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <StatCard icon={FileText} label="Documents" value={isLoading ? "—" : docs.filter((d) => !d.isTrashed).length} />
-          <StatCard icon={HardDrive} label="Storage used" value={user?.storageUsedBytes != null ? formatBytes(user.storageUsedBytes) : "—"} />
-          <StatCard icon={MessageSquare} label="Questions this month" value={user?.questionsUsedThisMonth != null ? `${user.questionsUsedThisMonth} / ${user?.plan === "pro" ? "∞" : "50"}` : "—"} />
+          <StatCard icon={FileText} label="Documents" value={docs.filter((d) => !d.isTrashed).length} loading={isLoading} />
+          <StatCard icon={HardDrive} label="Storage used" value={formatBytes(user?.storageUsedBytes ?? 0)} loading={user?.storageUsedBytes == null} />
+          <StatCard icon={MessageSquare} label="Questions this month" value={`${user?.questionsUsedThisMonth ?? 0} / ${user?.plan === "pro" ? "∞" : "50"}`} loading={user?.questionsUsedThisMonth == null} />
         </div>
 
         {isLoading ? (
@@ -84,7 +89,7 @@ export default function Dashboard() {
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {[1, 2, 3].map((n) => (
-                <div key={n} className="h-40 animate-pulse rounded-xl border border-border bg-card" />
+                <DocCardSkeleton key={n} />
               ))}
             </div>
           </section>

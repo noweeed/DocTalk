@@ -1,12 +1,13 @@
 import { TopBar } from "@/components/top-bar";
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { User, Palette, CreditCard, Camera, Loader2 } from "lucide-react";
+import { User, Palette, CreditCard, Camera } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -199,7 +200,7 @@ function ProfileTab() {
               disabled={avatarUploading}
               className="absolute -bottom-0.5 -right-0.5 grid h-7 w-7 place-items-center rounded-full border-2 border-card bg-primary text-primary-foreground shadow hover:bg-primary/90 disabled:opacity-60"
             >
-              {avatarUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+              {avatarUploading ? <Skeleton className="h-5 w-5 rounded" /> : <Camera className="h-3.5 w-3.5" />}
             </button>
             <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleAvatarChange} />
           </div>
