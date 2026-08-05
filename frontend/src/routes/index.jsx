@@ -1,12 +1,9 @@
 import { Link, Navigate } from "react-router-dom";
 import { Zap, Quote, Sun, Moon, GraduationCap, Search, Briefcase } from "lucide-react";
 import { useTheme } from "@/lib/theme";
-import { useAuth } from "@/lib/auth-context";
 
 export default function LandingPage() {
-  const { user, loading } = useAuth();
-
-  if (!loading && user) {
+  if (localStorage.getItem("token")) {
     return <Navigate to="/dashboard" replace />;
   }
 
