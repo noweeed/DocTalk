@@ -64,6 +64,14 @@ export default function TrashPage() {
   };
 
   const trashDocs = docs.filter((d) => d.isTrashed);
+  const allSelected = trashDocs.length > 0 && selectedIds.size === trashDocs.length;
+
+  const selectAll = () => {
+    setSelectedIds((prev) => {
+      if (allSelected) return new Set();
+      return new Set(trashDocs.map((d) => d._id));
+    });
+  };
 
   return (
     <>
@@ -71,26 +79,40 @@ export default function TrashPage() {
       <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8 sm:px-6 lg:px-10">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Trash</h1>
 
-        <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-border bg-card/60 px-4 py-3 text-xs text-muted-foreground">
-          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-          Items in trash are automatically deleted after 30 days.
+        <div className="mt-3 flex items-start gap-2 text-xs text-muted-foreground">
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>Items in trash are automatically deleted after 30 days.</span>
         </div>
 
-        {selectedIds.size > 0 && (
+        {trashDocs.length > 0 && (
           <div className="mt-4 flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
-            <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
+            {selectedIds.size > 0 ? (
+              <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
+            ) : (
+              <span className="text-sm text-muted-foreground">No documents selected</span>
+            )}
             <button
-              onClick={() => setSelectedIds(new Set())}
-              className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+              onClick={selectAll}
+              className="ml-auto text-xs font-medium text-primary underline-offset-4 hover:underline"
             >
-              Cancel
+              {allSelected ? "Deselect all" : "Select all"}
             </button>
-            <button
-              onClick={() => setShowDeleteDialog(true)}
-              className="rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-destructive-foreground transition-colors hover:bg-destructive/90"
-            >
-              Delete permanently
-            </button>
+            {selectedIds.size > 0 && (
+              <>
+                <button
+                  onClick={() => setSelectedIds(new Set())}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => setShowDeleteDialog(true)}
+                  className="rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-destructive-foreground transition-colors hover:bg-destructive/90"
+                >
+                  Delete permanently
+                </button>
+              </>
+            )}
           </div>
         )}
 

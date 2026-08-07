@@ -1,6 +1,5 @@
 import { Link } from "react-router-dom";
 import { TopBar } from "@/components/top-bar";
-import { DocCard } from "@/components/doc-card";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -121,7 +120,7 @@ export default function UploadPage() {
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
           className={cn(
-            "mt-8 rounded-2xl border-2 border-dashed bg-card/40 p-10 transition-colors sm:p-16",
+            "mt-6 rounded-2xl border-2 border-dashed bg-card/40 p-10 transition-colors sm:p-16",
             dragOver ? "border-primary bg-primary/5" : "border-border",
           )}
         >
@@ -184,17 +183,21 @@ export default function UploadPage() {
 
           {state === "done" && uploadedDoc && (
             <div className="mx-auto max-w-md">
-              <div className="mb-4 flex items-center gap-2">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                  <FileText className="h-4 w-4" />
-                </span>
-                <div>
-                  <h3 className="text-sm font-semibold text-foreground">Upload complete</h3>
-                  <p className="text-xs text-muted-foreground">{fileName}</p>
+              <div className="flex items-center gap-3">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold text-foreground">
+                    {fileName || uploadedDoc.title}
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Uploaded just now · {uploadedDoc.pageCount ?? "?"} page
+                    {uploadedDoc.pageCount === 1 ? "" : "s"}
+                  </div>
                 </div>
               </div>
-              <DocCard doc={uploadedDoc} />
-              <div className="mt-5 flex items-center justify-center gap-3">
+              <div className="mt-6 flex items-center justify-center gap-3">
                 <Link
                   to={`/documents/${docId}`}
                   className="inline-flex items-center gap-2 rounded-lg gradient-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-glow"
