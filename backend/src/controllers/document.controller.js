@@ -271,9 +271,18 @@ const permanentDeleteDocument = async (req, res) => {
       }
     }
 
-    await User.findByIdAndUpdate(req.user.id, {
-      $inc: { storageUsedBytes: -(document.fileSizeBytes || 0) },
-    });
+    await User.findByIdAndUpdate(
+      req.user.id,
+      [
+        {
+          $set: {
+            storageUsedBytes: {
+              $max: [{ $subtract: ["$storageUsedBytes", document.fileSizeBytes || 0] }, 0],
+            },
+          },
+        },
+      ],
+    );
 
     await Document.deleteOne({ _id: document._id });
 

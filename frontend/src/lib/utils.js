@@ -6,7 +6,7 @@ export function cn(...inputs) {
 }
 
 export function formatBytes(bytes) {
-  if (!bytes || bytes === 0) return "0 B";
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
   const units = ["B", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   const val = bytes / Math.pow(1024, i);

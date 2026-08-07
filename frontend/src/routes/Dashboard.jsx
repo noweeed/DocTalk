@@ -127,9 +127,11 @@ function EmptyDashboard() {
         <FileText className="h-6 w-6" />
       </div>
       <h3 className="mt-4 text-base font-semibold text-foreground">No documents yet</h3>
-      <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-        Upload your first PDF and start asking questions — DocTalk will answer with cited pages.
-      </p>
+            <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+              Upload your first PDF and start asking questions
+              <br />
+              DocTalk will answer with cited pages.
+            </p>
       <Link
         to="/upload"
         className="mt-5 inline-flex items-center gap-2 rounded-lg gradient-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-glow"

@@ -119,7 +119,9 @@ export default function RecentPage() {
             </div>
             <h3 className="mt-4 text-base font-semibold text-foreground">No documents yet</h3>
             <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-              Upload your first PDF and start asking questions — DocTalk will answer with cited pages.
+              Upload your first PDF and start asking questions
+              <br />
+              DocTalk will answer with cited pages.
             </p>
             <Link
               to="/upload"
