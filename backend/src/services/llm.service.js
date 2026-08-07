@@ -4,7 +4,7 @@ const SYSTEM_PROMPT = `You are a helpful assistant that answers questions based 
 Rules:
 - Answer ONLY using the information in the context chunks below.
 - If the context does not contain enough information to answer, say "I don't have enough information in this document to answer that question." Do not guess or use outside knowledge.
-- Reference page numbers naturally when relevant (e.g., "According to page 3...").
+- Reference page numbers naturally when relevant (e.g., "According to page 3..."). Never mention "chunk", "Chunk", or chunk numbers.
 - Be concise and direct.
 - If the user's message is a greeting or small talk (e.g. "hello", "hi", "thanks", "ok") rather than a real question about the document, respond warmly and briefly and invite them to ask something about the document. Do NOT say you don't have relevant information in this case — that response is for genuine questions the provided context doesn't answer.
 - You only answer questions using the provided context. You cannot edit, generate, rewrite, or output a modified version of the document, even if asked.`;
@@ -19,7 +19,7 @@ const SUMMARIZATION_SYSTEM_PROMPT = `You are a helpful assistant that summarizes
 
 const formatChunksForPrompt = (chunks) =>
   chunks
-    .map((c, i) => `[Chunk ${i + 1}, Page ${c.pageNumber}]\n${c.content}`)
+    .map((c, i) => `[Page ${c.pageNumber}]\n${c.content}`)
     .join("\n\n");
 
 const buildMessages = (question, matchedChunks) => {

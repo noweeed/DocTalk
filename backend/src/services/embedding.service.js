@@ -1,8 +1,7 @@
 const { getNextGenAI } = require("../config/gemini");
 const Chunk = require("../models/Chunk");
 
-const BATCH_SIZE = 4;
-const BATCH_DELAY_MS = 4000;
+const BATCH_SIZE = 25;
 const MAX_RETRIES = 3;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -45,6 +44,33 @@ const embedTextWithRetry = async (text, retries = MAX_RETRIES) => {
   }
 };
 
+const embedBatchWithRetry = async (texts, retries = MAX_RETRIES) => {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const genAI = getNextGenAI();
+      const model = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
+      const result = await model.batchEmbedContents({
+        requests: texts.map((text) => ({
+          content: { parts: [{ text }] },
+          outputDimensionality: 768,
+        })),
+      });
+      return result.embeddings.map((e) => e.values);
+    } catch (err) {
+      const isLastAttempt = attempt === retries - 1;
+      if (err.status === 429 && !isLastAttempt) {
+        const delayMs = getRetryDelayMs(err);
+        console.warn(
+          `Embedding batch rate-limited (attempt ${attempt + 1}/${retries}), retrying in ${delayMs}ms`,
+        );
+        await sleep(delayMs);
+      } else {
+        throw err;
+      }
+    }
+  }
+};
+
 const embedChunksForDocument = async (documentId) => {
   const chunks = await Chunk.find({ documentId });
 
@@ -55,22 +81,25 @@ const embedChunksForDocument = async (documentId) => {
   for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
     const batch = chunks.slice(i, i + BATCH_SIZE);
 
-    const results = await Promise.allSettled(
-      batch.map(async (chunk) => {
-        const embedding = await embedTextWithRetry(chunk.content);
-        await Chunk.updateOne({ _id: chunk._id }, { $set: { embedding } });
-        return chunk._id;
-      }),
-    );
-
-    results.forEach((r) => {
-      if (r.status === "rejected") console.error("Embedding failed:", r.reason);
-    });
-
-    embedded += results.filter((r) => r.status === "fulfilled").length;
-
-    if (i + BATCH_SIZE < chunks.length) {
-      await sleep(BATCH_DELAY_MS);
+    try {
+      const embeddings = await embedBatchWithRetry(batch.map((c) => c.content));
+      await Promise.all(
+        batch.map((chunk, idx) =>
+          Chunk.updateOne({ _id: chunk._id }, { $set: { embedding: embeddings[idx] } }),
+        ),
+      );
+      embedded += batch.length;
+    } catch (err) {
+      console.error("Embedding batch failed, falling back per chunk:", err.message);
+      for (const chunk of batch) {
+        try {
+          const embedding = await embedTextWithRetry(chunk.content);
+          await Chunk.updateOne({ _id: chunk._id }, { $set: { embedding } });
+          embedded += 1;
+        } catch (e) {
+          console.error("Embedding failed:", e.message);
+        }
+      }
     }
   }
 

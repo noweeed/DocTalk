@@ -33,6 +33,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import ReactMarkdown from "react-markdown";
+import { Document, Page } from "react-pdf";
 import { Input } from "@/components/ui/input";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -70,7 +71,8 @@ export default function DocumentChat() {
   const [chatOpen, setChatOpen] = useState(true);
   const [chatWidth, setChatWidth] = useState(400);
   const [page, setPage] = useState(1);
-  const [zoom, setZoom] = useState(100);
+  const [numPages, setNumPages] = useState(0);
+  const [zoom, setZoom] = useState(1);
   const [flashPage, setFlashPage] = useState(null);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
@@ -80,6 +82,8 @@ export default function DocumentChat() {
   const dragging = useRef(false);
   const chatEndRef = useRef(null);
   const titleInputRef = useRef(null);
+  const pdfScrollRef = useRef(null);
+  const pageRefs = useRef([]);
 
   useEffect(() => {
     const onMove = (e) => {
@@ -102,11 +106,32 @@ export default function DocumentChat() {
   }, [messages, streaming]);
 
   useEffect(() => {
+    if (!pdfScrollRef.current || numPages === 0) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const idx = pageRefs.current.indexOf(entry.target);
+            if (idx >= 0) setPage(idx + 1);
+            break;
+          }
+        }
+      },
+      { root: pdfScrollRef.current, threshold: 0.5 },
+    );
+    pageRefs.current.forEach((el) => el && observer.observe(el));
+    return () => observer.disconnect();
+  }, [numPages, zoom, status]);
+
+  useEffect(() => {
     let cancelled = false;
     let pollTimer;
 
     async function init() {
       try {
+        pageRefs.current = [];
+        setNumPages(0);
+        setPage(1);
         const docData = await documentsApi.get(id);
         if (cancelled) return;
         setDoc(docData);
@@ -301,7 +326,18 @@ export default function DocumentChat() {
   const jumpToPage = (p) => {
     setPage(p);
     setFlashPage(p);
+    const target = pageRefs.current[p - 1];
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
     setTimeout(() => setFlashPage(null), 900);
+  };
+
+  const scrollToPage = (p) => {
+    const target = pageRefs.current[p - 1];
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   };
 
   if (status === "loading") {
@@ -458,15 +494,15 @@ export default function DocumentChat() {
         <div className="flex min-w-0 flex-1 flex-col bg-background">
           <div className="flex items-center gap-2 border-b border-border px-4 py-2 text-xs text-muted-foreground">
             <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              onClick={() => scrollToPage(Math.max(1, page - 1))}
               className="grid h-7 w-7 place-items-center rounded hover:bg-accent hover:text-foreground"
               aria-label="Previous page"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
             </button>
-            <span className="tabular-nums">Page {page} / {doc?.pageCount ?? "?"}</span>
+            <span className="tabular-nums">Page {page} / {numPages || doc?.pageCount || "?"}</span>
             <button
-              onClick={() => setPage((p) => Math.min(doc?.pageCount ?? 999, p + 1))}
+              onClick={() => scrollToPage(Math.min(numPages || doc?.pageCount || 999, page + 1))}
               className="grid h-7 w-7 place-items-center rounded hover:bg-accent hover:text-foreground"
               aria-label="Next page"
             >
@@ -474,15 +510,15 @@ export default function DocumentChat() {
             </button>
             <div className="mx-2 h-4 w-px bg-border" />
             <button
-              onClick={() => setZoom((z) => Math.max(50, z - 10))}
+              onClick={() => setZoom((z) => Math.max(0.25, +(z - 0.1).toFixed(2)))}
               className="grid h-7 w-7 place-items-center rounded hover:bg-accent hover:text-foreground"
               aria-label="Zoom out"
             >
               <ZoomOut className="h-3.5 w-3.5" />
             </button>
-            <span className="tabular-nums">{zoom}%</span>
+            <span className="tabular-nums">{Math.round(zoom * 100)}%</span>
             <button
-              onClick={() => setZoom((z) => Math.min(200, z + 10))}
+              onClick={() => setZoom((z) => Math.min(3, +(z + 0.1).toFixed(2)))}
               className="grid h-7 w-7 place-items-center rounded hover:bg-accent hover:text-foreground"
               aria-label="Zoom in"
             >
@@ -490,14 +526,43 @@ export default function DocumentChat() {
             </button>
           </div>
 
-          <div className="flex-1 overflow-auto bg-muted/30">
+          <div ref={pdfScrollRef} className="flex-1 overflow-y-auto bg-muted/30">
             {pdfUrl && (
-              <iframe
-                key={`${page}`}
-                src={`${pdfUrl}#page=${page}`}
-                className="h-full w-full"
-                title={title}
-              />
+              <Document
+                file={pdfUrl}
+                onLoadSuccess={({ numPages: n }) => setNumPages(n)}
+                loading={
+                  <div className="grid h-full min-h-[300px] place-items-center text-sm text-muted-foreground">
+                    Loading PDF…
+                  </div>
+                }
+              >
+                <div className="flex flex-col items-center gap-4 py-4">
+                  {Array.from({ length: numPages || 0 }, (_, i) => (
+                    <div
+                      key={i + 1}
+                      ref={(el) => (pageRefs.current[i] = el)}
+                      className={cn(
+                        "shrink-0 rounded-sm bg-white shadow-sm",
+                        flashPage === i + 1 && "ring-2 ring-primary",
+                      )}
+                    >
+                      <Page
+                        pageNumber={i + 1}
+                        scale={zoom}
+                        renderTextLayer={false}
+                        renderAnnotationLayer={false}
+                        className="max-w-full"
+                        loading={
+                          <div className="grid h-[300px] w-[600px] max-w-full place-items-center text-sm text-muted-foreground">
+                            Loading page…
+                          </div>
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+              </Document>
             )}
           </div>
         </div>
