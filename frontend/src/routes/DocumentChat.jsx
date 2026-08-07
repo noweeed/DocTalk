@@ -49,9 +49,9 @@ const formatPageLabel = (page) => {
   const value = String(page);
   if (value.includes("-")) {
     const [min, max] = value.split("-");
-    return `Pages #${min}-#${max}`;
+    return `Pages ${min}-${max}`;
   }
-  return `Page #${value}`;
+  return `Page ${value}`;
 };
 
 export default function DocumentChat() {
