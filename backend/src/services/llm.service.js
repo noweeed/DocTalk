@@ -1,4 +1,29 @@
 const groq = require("../config/groq");
+const { GROQ_MODEL, GROQ_CLASSIFIER_MODEL } = require("../config/groq");
+
+const isReasoningModel = (model) => /^openai\/gpt-oss/i.test(model);
+
+const buildChatCompletionParams = ({
+  model = GROQ_MODEL,
+  messages,
+  temperature = 0.3,
+  maxTokens = 1024,
+  stream = false,
+}) => {
+  const params = {
+    model,
+    messages,
+    temperature,
+    max_tokens: isReasoningModel(model) ? Math.max(maxTokens, 2048) : maxTokens,
+  };
+  if (stream) {
+    params.stream = true;
+  }
+  if (isReasoningModel(model)) {
+    params.reasoning_effort = "low";
+  }
+  return params;
+};
 
 const SYSTEM_PROMPT = `You are a helpful assistant that answers questions based on the provided document context.
 Rules:
@@ -38,12 +63,14 @@ const generateAnswer = async (question, matchedChunks) => {
 
   const messages = buildMessages(question, matchedChunks);
 
-  const response = await groq.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
-    messages,
-    temperature: 0.3,
-    max_tokens: 1024,
-  });
+  const response = await groq.chat.completions.create(
+    buildChatCompletionParams({
+      model: GROQ_MODEL,
+      messages,
+      temperature: 0.3,
+      maxTokens: 1024,
+    }),
+  );
 
   return response.choices[0].message.content;
 };
@@ -56,13 +83,15 @@ const streamAnswer = async function* (question, matchedChunks) {
 
   const messages = buildMessages(question, matchedChunks);
 
-  const response = await groq.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
-    messages,
-    temperature: 0.3,
-    max_tokens: 1024,
-    stream: true,
-  });
+  const response = await groq.chat.completions.create(
+    buildChatCompletionParams({
+      model: GROQ_MODEL,
+      messages,
+      temperature: 0.3,
+      maxTokens: 1024,
+      stream: true,
+    }),
+  );
 
   for await (const chunk of response) {
     const text = chunk.choices[0]?.delta?.content;
@@ -82,13 +111,15 @@ const streamSummarization = async function* (question, context) {
     { role: "user", content: userMessage },
   ];
 
-  const response = await groq.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
-    messages,
-    temperature: 0.3,
-    max_tokens: 1024,
-    stream: true,
-  });
+  const response = await groq.chat.completions.create(
+    buildChatCompletionParams({
+      model: GROQ_MODEL,
+      messages,
+      temperature: 0.3,
+      maxTokens: 1024,
+      stream: true,
+    }),
+  );
 
   for await (const chunk of response) {
     const text = chunk.choices[0]?.delta?.content;
@@ -102,13 +133,15 @@ const streamSmallTalk = async function* (question) {
     { role: "user", content: question },
   ];
 
-  const response = await groq.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
-    messages,
-    temperature: 0.3,
-    max_tokens: 1024,
-    stream: true,
-  });
+  const response = await groq.chat.completions.create(
+    buildChatCompletionParams({
+      model: GROQ_MODEL,
+      messages,
+      temperature: 0.3,
+      maxTokens: 1024,
+      stream: true,
+    }),
+  );
 
   for await (const chunk of response) {
     const text = chunk.choices[0]?.delta?.content;
@@ -122,15 +155,17 @@ Reply with "SMALL_TALK" if it is a greeting, thanks, praise, acknowledgement, or
 Reply with "OUT_OF_SCOPE" if it asks to edit, modify, rewrite, translate, generate a new document/file, or otherwise produce altered content rather than answer a question about the existing content.`;
 
 const classifyMessage = async (question) => {
-  const response = await groq.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
-    messages: [
-      { role: "system", content: CLASSIFY_SYSTEM_PROMPT },
-      { role: "user", content: question },
-    ],
-    temperature: 0,
-    max_tokens: 10,
-  });
+  const response = await groq.chat.completions.create(
+    buildChatCompletionParams({
+      model: GROQ_CLASSIFIER_MODEL,
+      messages: [
+        { role: "system", content: CLASSIFY_SYSTEM_PROMPT },
+        { role: "user", content: question },
+      ],
+      temperature: 0,
+      maxTokens: 10,
+    }),
+  );
 
   const label = (response.choices[0]?.message?.content || "").trim().toUpperCase();
   if (label.includes("SMALL_TALK")) return "SMALL_TALK";
